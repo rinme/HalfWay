@@ -1,9 +1,10 @@
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { AppSettings, LocationPoint, MapProvider, SearchState } from "../src/types";
-import { useSearchState } from "../src/hooks/useSearchState";
+import { AppSettings, LocationPoint, MapProvider, Person, SearchState } from "../src/types";
+import { useSearchState, PERSON_COLORS } from "../src/hooks/useSearchState";
 import { SettingsModal } from "../src/components/SettingsModal";
+import { ShareModal } from "../src/components/ShareModal";
 
 // --- Mock DOM Environment for React Client Tests in Bun ---
 
@@ -72,6 +73,11 @@ interface WindowMock {
     replaceState: (state: unknown, title: string, url: string) => void;
   };
   localStorage: StorageMock;
+  navigator?: {
+    clipboard: {
+      writeText: (text: string) => Promise<void>;
+    };
+  };
   window?: WindowMock;
   self?: WindowMock;
   document?: MockDoc;
@@ -80,6 +86,7 @@ interface WindowMock {
 let mockLocalStorage: Record<string, string> = {};
 let currentSearch = "";
 let replacedUrl = "";
+let writtenClipboardText = "";
 
 function createMockDoc(win: WindowMock): MockDoc {
   const doc: MockDoc = {
@@ -142,6 +149,7 @@ function setupDOM(initialSearch: string = "") {
   mockLocalStorage = {};
   currentSearch = initialSearch;
   replacedUrl = "";
+  writtenClipboardText = "";
 
   const win: WindowMock = {
     HTMLIFrameElement: class {},
@@ -156,6 +164,13 @@ function setupDOM(initialSearch: string = "") {
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => true,
+    navigator: {
+      clipboard: {
+        writeText: async (text: string) => {
+          writtenClipboardText = text;
+        },
+      },
+    },
     location: {
       get search() {
         return currentSearch;
@@ -200,12 +215,18 @@ function setupDOM(initialSearch: string = "") {
     window: WindowMock;
     document: MockDoc;
     localStorage: StorageMock;
+    navigator?: {
+      clipboard: {
+        writeText: (text: string) => Promise<void>;
+      };
+    };
     IS_REACT_ACT_ENVIRONMENT: boolean;
   } & WindowMock;
 
   globalScope.window = win;
   globalScope.document = doc;
   globalScope.localStorage = win.localStorage;
+  globalScope.navigator = win.navigator;
   globalScope.IS_REACT_ACT_ENVIRONMENT = true;
   Object.assign(globalScope, win);
 
@@ -316,7 +337,21 @@ describe("Task 6: Types and Shared Interfaces", () => {
     expect(settings.googleMapsApiKey).toBe("AIzaTestKey");
     expect(settings.activeProvider).toBe("google");
 
+    const person: Person = {
+      id: "person-1",
+      name: "Person 1",
+      address: "Bangkok Central",
+      lat: 13.75,
+      lng: 100.5,
+      color: "#10b981",
+    };
+    expect(person.id).toBe("person-1");
+    expect(person.name).toBe("Person 1");
+    expect(person.color).toBe("#10b981");
+
     const state: SearchState = {
+      persons: [person],
+      activePinPersonId: "person-1",
       pointA: point,
       pointB: null,
       query: "Starbucks",
@@ -328,6 +363,8 @@ describe("Task 6: Types and Shared Interfaces", () => {
       error: null,
       highlightedBranchId: null,
     };
+    expect(state.persons).toEqual([person]);
+    expect(state.activePinPersonId).toBe("person-1");
     expect(state.pointA).toEqual(point);
     expect(state.activePinMode).toBe("A");
     expect(state.query).toBe("Starbucks");
@@ -588,13 +625,13 @@ describe("Task 6: useSearchState Hook", () => {
     });
 
     expect(capturedUrl).toBe("/api/search-midpoint");
-    expect(capturedBody).toEqual({
-      pointA: { lat: 13.75, lng: 100.5 },
-      pointB: { lat: 13.72, lng: 100.52 },
+    expect(capturedBody).toMatchObject({
       query: "Starbucks",
-      apiKey: undefined,
       preferredProvider: "osm",
     });
+    expect((capturedBody as any).persons).toBeDefined();
+    expect((capturedBody as any).persons[0].lat).toBe(13.75);
+    expect((capturedBody as any).persons[1].lat).toBe(13.72);
 
     expect(result.current.state.isLoading).toBe(false);
     expect(result.current.state.error).toBeNull();
@@ -916,6 +953,552 @@ describe("Task 6: SettingsModal Component", () => {
     expect(collectTextContent(container)).toContain(
       "Key returned no geocoding results or lacks Places API access."
     );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("displays server default key indicator when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is present", async () => {
+    const originalEnv = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaServerEnvKey";
+
+    try {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+
+      await act(async () => {
+        root.render(
+          React.createElement(SettingsModal, {
+            isOpen: true,
+            onClose: () => {},
+            settings: { googleMapsApiKey: "", activeProvider: "google" },
+            onSaveSettings: () => {},
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const text = collectTextContent(container);
+      expect(text).toContain("Server Default Key Active (Google Maps)");
+
+      await act(async () => {
+        root.unmount();
+      });
+    } finally {
+      if (originalEnv) process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = originalEnv;
+      else delete process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    }
+  });
+});
+
+describe("Multi-Person State Management (Task 4)", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    setupDOM();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("initializes persons with 2 default participants with default colors and activePinPersonId null", async () => {
+    const { result, unmount } = await renderHook(() => useSearchState());
+
+    expect(result.current.state.persons.length).toBe(2);
+    expect(result.current.state.persons[0].name).toBe("Person 1");
+    expect(result.current.state.persons[1].name).toBe("Person 2");
+    expect(result.current.state.persons[0].color).toBe("#10b981");
+    expect(result.current.state.persons[1].color).toBe("#8b5cf6");
+    expect(result.current.state.activePinPersonId).toBeNull();
+
+    await unmount();
+  });
+
+  it("adds a person up to maximum of 8 participants and assigns palette colors", async () => {
+    const { result, act: actHook, unmount } = await renderHook(() => useSearchState());
+
+    // Initial 2 persons
+    expect(result.current.state.persons.length).toBe(2);
+
+    // Add up to 8 persons
+    for (let i = 3; i <= 8; i++) {
+      await actHook(() => {
+        result.current.addPerson();
+      });
+      expect(result.current.state.persons.length).toBe(i);
+      expect(result.current.state.persons[i - 1].name).toBe(`Person ${i}`);
+      expect(result.current.state.persons[i - 1].color).toBe(PERSON_COLORS[(i - 1) % PERSON_COLORS.length]);
+    }
+    expect(result.current.state.persons.length).toBe(8);
+
+    // Attempt to add a 9th person should be ignored (clamped at 8)
+    await actHook(() => {
+      result.current.addPerson();
+    });
+    expect(result.current.state.persons.length).toBe(8);
+
+    await unmount();
+  });
+
+  it("prevents removing a person when only 2 persons remain", async () => {
+    const { result, act: actHook, unmount } = await renderHook(() => useSearchState());
+
+    expect(result.current.state.persons.length).toBe(2);
+    const firstId = result.current.state.persons[0].id;
+
+    // Attempting to remove from 2 persons -> should not remove
+    await actHook(() => {
+      result.current.removePerson(firstId);
+    });
+    expect(result.current.state.persons.length).toBe(2);
+
+    // Add a 3rd person, then remove should work
+    await actHook(() => {
+      result.current.addPerson();
+    });
+    expect(result.current.state.persons.length).toBe(3);
+    const thirdId = result.current.state.persons[2].id;
+
+    await actHook(() => {
+      result.current.removePerson(thirdId);
+    });
+    expect(result.current.state.persons.length).toBe(2);
+    expect(result.current.state.persons.find((p) => p.id === thirdId)).toBeUndefined();
+
+    await unmount();
+  });
+
+  it("resets activePinPersonId if the targeted person is removed", async () => {
+    const { result, act: actHook, unmount } = await renderHook(() => useSearchState());
+
+    await actHook(() => {
+      result.current.addPerson();
+    });
+    const thirdPerson = result.current.state.persons[2];
+
+    await actHook(() => {
+      result.current.setActivePinPersonId(thirdPerson.id);
+    });
+    expect(result.current.state.activePinPersonId).toBe(thirdPerson.id);
+
+    await actHook(() => {
+      result.current.removePerson(thirdPerson.id);
+    });
+    expect(result.current.state.activePinPersonId).toBeNull();
+
+    await unmount();
+  });
+
+  it("renames a person by id", async () => {
+    const { result, act: actHook, unmount } = await renderHook(() => useSearchState());
+    const p1Id = result.current.state.persons[0].id;
+
+    await actHook(() => {
+      result.current.renamePerson(p1Id, "Alice Cooper");
+    });
+    expect(result.current.state.persons[0].name).toBe("Alice Cooper");
+    // Other person remains unchanged
+    expect(result.current.state.persons[1].name).toBe("Person 2");
+
+    await unmount();
+  });
+
+  it("updates person location and keeps legacy pointA and pointB in sync", async () => {
+    const { result, act: actHook, unmount } = await renderHook(() => useSearchState());
+    const p1Id = result.current.state.persons[0].id;
+    const p2Id = result.current.state.persons[1].id;
+
+    await actHook(() => {
+      result.current.updatePersonLocation(p1Id, {
+        address: "Siam Paragon",
+        lat: 13.746,
+        lng: 100.534,
+      });
+      result.current.updatePersonLocation(p2Id, {
+        address: "Iconsiam",
+        lat: 13.726,
+        lng: 100.51,
+      });
+    });
+
+    expect(result.current.state.persons[0].address).toBe("Siam Paragon");
+    expect(result.current.state.persons[0].lat).toBe(13.746);
+    expect(result.current.state.persons[0].lng).toBe(100.534);
+
+    expect(result.current.state.pointA).toEqual({
+      address: "Siam Paragon",
+      lat: 13.746,
+      lng: 100.534,
+    });
+    expect(result.current.state.pointB).toEqual({
+      address: "Iconsiam",
+      lat: 13.726,
+      lng: 100.51,
+    });
+
+    await unmount();
+  });
+
+  it("sets and toggles activePinPersonId and syncs activePinMode", async () => {
+    const { result, act: actHook, unmount } = await renderHook(() => useSearchState());
+    const p1Id = result.current.state.persons[0].id;
+    const p2Id = result.current.state.persons[1].id;
+
+    await actHook(() => {
+      result.current.setActivePinPersonId(p1Id);
+    });
+    expect(result.current.state.activePinPersonId).toBe(p1Id);
+    expect(result.current.state.activePinMode).toBe("A");
+
+    await actHook(() => {
+      result.current.setActivePinPersonId(p2Id);
+    });
+    expect(result.current.state.activePinPersonId).toBe(p2Id);
+    expect(result.current.state.activePinMode).toBe("B");
+
+    await actHook(() => {
+      result.current.setActivePinPersonId(null);
+    });
+    expect(result.current.state.activePinPersonId).toBeNull();
+    expect(result.current.state.activePinMode).toBeNull();
+
+    await unmount();
+  });
+
+  it("defaults provider to google when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is present in env", async () => {
+    const originalEnv = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaEnvTestKey";
+
+    try {
+      const { result, unmount } = await renderHook(() => useSearchState());
+      expect(result.current.settings.activeProvider).toBe("google");
+      await unmount();
+    } finally {
+      if (originalEnv) process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = originalEnv;
+      else delete process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    }
+  });
+
+  it("hydrates state from ?s=... share code via /api/share", async () => {
+    let requestedShareUrl = "";
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      requestedShareUrl = url.toString();
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            query: "Matcha Latte",
+            persons: [
+              { id: "s1", name: "Alice", address: "Siam Square", lat: 13.7469, lng: 100.534, color: "#10b981" },
+              { id: "s2", name: "Bob", address: "Silom Complex", lat: 13.726, lng: 100.51, color: "#8b5cf6" },
+              { id: "s3", name: "Charlie", address: "EmQuartier", lat: 13.731, lng: 100.569, color: "#f59e0b" },
+            ],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }) as unknown as typeof fetch;
+
+    setupDOM("?s=X7k9Pq");
+    const { result, unmount } = await renderHook(() => useSearchState());
+
+    // Wait for URL share code hydration effect
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    expect(requestedShareUrl).toContain("/api/share?code=X7k9Pq");
+    expect(result.current.state.query).toBe("Matcha Latte");
+    expect(result.current.state.persons.length).toBe(3);
+    expect(result.current.state.persons[0].name).toBe("Alice");
+    expect(result.current.state.persons[1].name).toBe("Bob");
+    expect(result.current.state.persons[2].name).toBe("Charlie");
+    expect(result.current.state.pointA?.address).toBe("Siam Square");
+    expect(result.current.state.pointB?.address).toBe("Silom Complex");
+
+    await unmount();
+  });
+
+  it("hydrates legacy URL params into persons[0] and persons[1]", async () => {
+    setupDOM(
+      "?a_lat=13.7563&a_lng=100.5018&a_name=Location%20A&b_lat=13.7245&b_lng=100.5284&b_name=Location%20B&q=Milk%20Tea"
+    );
+
+    const { result, unmount } = await renderHook(() => useSearchState());
+
+    expect(result.current.state.persons[0].address).toBe("Location A");
+    expect(result.current.state.persons[0].lat).toBe(13.7563);
+    expect(result.current.state.persons[0].lng).toBe(100.5018);
+    expect(result.current.state.persons[1].address).toBe("Location B");
+    expect(result.current.state.persons[1].lat).toBe(13.7245);
+    expect(result.current.state.persons[1].lng).toBe(100.5284);
+    expect(result.current.state.query).toBe("Milk Tea");
+
+    await unmount();
+  });
+
+  it("executeSearch sends persons array to /api/search-midpoint", async () => {
+    let capturedBody: any = null;
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedBody = init?.body ? JSON.parse(init.body as string) : null;
+      return new Response(
+        JSON.stringify({
+          success: true,
+          midpoint: { lat: 13.73, lng: 100.52 },
+          totalDistanceAB: 4.5,
+          branches: [],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }) as unknown as typeof fetch;
+
+    const { result, act: actHook, unmount } = await renderHook(() => useSearchState());
+
+    await actHook(() => {
+      result.current.addPerson();
+    });
+
+    await actHook(() => {
+      result.current.updatePersonLocation(result.current.state.persons[0].id, {
+        address: "Point 1",
+        lat: 13.75,
+        lng: 100.5,
+      });
+      result.current.updatePersonLocation(result.current.state.persons[1].id, {
+        address: "Point 2",
+        lat: 13.72,
+        lng: 100.52,
+      });
+      result.current.updatePersonLocation(result.current.state.persons[2].id, {
+        address: "Point 3",
+        lat: 13.74,
+        lng: 100.55,
+      });
+      result.current.setQuery("Specialty Coffee");
+    });
+
+    await actHook(async () => {
+      await result.current.executeSearch();
+    });
+
+    expect(capturedBody).not.toBeNull();
+    expect(capturedBody.persons).toBeDefined();
+    expect(capturedBody.persons.length).toBe(3);
+    expect(capturedBody.persons[0].address).toBe("Point 1");
+    expect(capturedBody.persons[1].address).toBe("Point 2");
+    expect(capturedBody.persons[2].address).toBe("Point 3");
+    expect(capturedBody.query).toBe("Specialty Coffee");
+
+    await unmount();
+  });
+});
+
+describe("Task 4: ShareModal Component", () => {
+  const originalFetch = globalThis.fetch;
+  const samplePersons: Person[] = [
+    { id: "p1", name: "Alice", address: "Siam", lat: 13.75, lng: 100.5, color: "#10b981" },
+    { id: "p2", name: "Bob", address: "Silom", lat: 13.72, lng: 100.52, color: "#8b5cf6" },
+  ];
+
+  beforeEach(() => {
+    setupDOM();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("renders nothing when isOpen is false", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    await act(async () => {
+      root.render(
+        React.createElement(ShareModal, {
+          isOpen: false,
+          onClose: () => {},
+          persons: samplePersons,
+          query: "Starbucks",
+        })
+      );
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(container.childNodes.length).toBe(0);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("renders modal with default 24h expiration selector and closes on cancel", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+    let closed = false;
+
+    await act(async () => {
+      root.render(
+        React.createElement(ShareModal, {
+          isOpen: true,
+          onClose: () => {
+            closed = true;
+          },
+          persons: samplePersons,
+          query: "Starbucks",
+        })
+      );
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const text = collectTextContent(container);
+    expect(text).toContain("Share Search");
+    expect(text).toContain("24 Hours");
+    expect(text).toContain("3 Days");
+    expect(text).toContain("7 Days");
+    expect(text).toContain("Generate Share Link");
+
+    // Close button
+    const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+    const closeBtn = buttons.find(
+      (btn) => collectTextContent(btn).includes("Cancel") || btn["aria-label"] === "Close"
+    );
+    expect(closeBtn).toBeDefined();
+
+    await act(async () => {
+      getReactProps(closeBtn!)?.onClick?.();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(closed).toBe(true);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("generates share link via POST /api/share and copies to clipboard", async () => {
+    let capturedBody: any = null;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      capturedBody = init?.body ? JSON.parse(init.body as string) : null;
+      return new Response(
+        JSON.stringify({
+          success: true,
+          code: "AbCd12",
+          expiresAt: Date.now() + 72 * 3600 * 1000,
+          shareUrl: "/?s=AbCd12",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }) as unknown as typeof fetch;
+
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    await act(async () => {
+      root.render(
+        React.createElement(ShareModal, {
+          isOpen: true,
+          onClose: () => {},
+          persons: samplePersons,
+          query: "Starbucks",
+        })
+      );
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+    // Select 3 days expiration
+    const threeDaysBtn = buttons.find((btn) => collectTextContent(btn).includes("3 Days"));
+    expect(threeDaysBtn).toBeDefined();
+
+    await act(async () => {
+      getReactProps(threeDaysBtn!)?.onClick?.();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // Click Generate Share Link
+    const generateBtn = buttons.find((btn) => collectTextContent(btn).includes("Generate Share Link"));
+    expect(generateBtn).toBeDefined();
+
+    await act(async () => {
+      getReactProps(generateBtn!)?.onClick?.();
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    expect(capturedBody).not.toBeNull();
+    expect(capturedBody.query).toBe("Starbucks");
+    expect(capturedBody.expiresInHours).toBe(72);
+    expect(capturedBody.persons.length).toBe(2);
+
+    // Verify share link displayed in input
+    const inputNode = findElement(container, (n) => n.tagName === "INPUT");
+    expect(inputNode).not.toBeNull();
+    expect(getReactProps(inputNode!)?.value).toContain("s=AbCd12");
+    const updatedButtons = findAllElements(container, (n) => n.tagName === "BUTTON");
+    const textAfterGen = collectTextContent(container);
+    expect(textAfterGen).toContain("3 days");
+
+    // Click Copy Link button
+    const copyBtn = updatedButtons.find((btn) => collectTextContent(btn).includes("Copy"));
+    expect(copyBtn).toBeDefined();
+
+    await act(async () => {
+      getReactProps(copyBtn!)?.onClick?.();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(writtenClipboardText).toContain("s=AbCd12");
+    const textAfterCopy = collectTextContent(container);
+    expect(textAfterCopy).toContain("Copied");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("handles error during share link generation gracefully", async () => {
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Failed to generate share link",
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }) as unknown as typeof fetch;
+
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    await act(async () => {
+      root.render(
+        React.createElement(ShareModal, {
+          isOpen: true,
+          onClose: () => {},
+          persons: samplePersons,
+          query: "Starbucks",
+        })
+      );
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+    const generateBtn = buttons.find((btn) => collectTextContent(btn).includes("Generate Share Link"));
+
+    await act(async () => {
+      getReactProps(generateBtn!)?.onClick?.();
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const text = collectTextContent(container);
+    expect(text).toContain("Failed to generate share link");
 
     await act(async () => {
       root.unmount();

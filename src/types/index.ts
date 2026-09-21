@@ -6,6 +6,15 @@ export interface LocationPoint {
   lng: number;
 }
 
+export interface Person {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  color?: string;
+}
+
 export type MapProvider = "osm" | "google";
 
 export interface AppSettings {
@@ -14,10 +23,12 @@ export interface AppSettings {
 }
 
 export interface SearchState {
-  pointA: LocationPoint | null;
-  pointB: LocationPoint | null;
+  persons: Person[];
+  activePinPersonId: string | null;
+  pointA?: LocationPoint | null;
+  pointB?: LocationPoint | null;
+  activePinMode?: "A" | "B" | null;
   query: string;
-  activePinMode: "A" | "B" | null;
   branches: ScoredBranch[];
   midpoint: LatLng | null;
   totalDistanceAB: number | null;

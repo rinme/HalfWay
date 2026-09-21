@@ -117,6 +117,12 @@ export function SettingsModal({
             <p className="text-xs text-zinc-500 mb-2">
               Stored securely in your local browser storage. Used for Google Maps JS, Geocoding & Places.
             </p>
+            {Boolean(typeof process !== "undefined" && process.env?.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) && (
+              <div className="mb-3 flex items-center gap-2 p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-700 dark:text-indigo-300">
+                <CheckCircle2 className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                <span>Server Default Key Active (Google Maps)</span>
+              </div>
+            )}
             <div className="flex gap-2">
               <input
                 type="password"
