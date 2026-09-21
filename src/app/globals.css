@@ -1,4 +1,20 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* Marker styling helpers */
+.custom-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+}
+
+.custom-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
 
 :root {
   --background: #ffffff;
