@@ -1,5 +1,7 @@
 import { LatLng, ScoredBranch } from "@/lib/geo";
 
+export type { LatLng, ScoredBranch };
+
 export interface LocationPoint {
   address: string;
   lat: number;
