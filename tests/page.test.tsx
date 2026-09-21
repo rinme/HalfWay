@@ -595,6 +595,10 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    if ((globalThis as any).__happyDoc) {
+      (globalThis as any).document = (globalThis as any).__happyDoc;
+      (globalThis as any).window = (globalThis as any).__happyWin;
+    }
   });
 
   it("mounts full split-layout page with Header, SearchForm, ResultsList, and MapView", async () => {
@@ -609,7 +613,7 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
 
     // 1. Check layout styling (responsive split screen)
     const pageContainer = container.childNodes[0];
-    expect(pageContainer.className).toContain("flex flex-col h-screen w-screen overflow-hidden");
+    expect(pageContainer.className).toContain("flex flex-col h-[100dvh] w-screen overflow-hidden");
 
     // 2. Check Header branding
     const allText = collectTextContent(container);

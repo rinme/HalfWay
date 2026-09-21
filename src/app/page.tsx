@@ -7,8 +7,12 @@ import { ResultsList } from "@/components/ResultsList";
 import { MapView } from "@/components/map/MapView";
 import { SettingsModal } from "@/components/SettingsModal";
 import { ShareModal } from "@/components/ShareModal";
+import { MobileFloatingToggle } from "@/components/mobile/MobileFloatingToggle";
+import { MobileSearchSummary } from "@/components/mobile/MobileSearchSummary";
+import { MobileBranchPreview } from "@/components/mobile/MobileBranchPreview";
+import { MobilePinningBanner } from "@/components/mobile/MobilePinningBanner";
 import { useSearchState } from "@/hooks/useSearchState";
-import { LatLng } from "@/lib/geo";
+import { LatLng, ScoredBranch } from "@/lib/geo";
 
 export default function HalfwayFinderPage() {
   const {
@@ -31,6 +35,25 @@ export default function HalfwayFinderPage() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<"list" | "map">("list");
+  const [isSearchCollapsed, setIsSearchCollapsed] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<ScoredBranch | null>(null);
+
+  // Switch to map view when pin targeting is activated
+  const handleTogglePinPersonId = (id: string) => {
+    const nextId = state.activePinPersonId === id ? null : id;
+    setActivePinPersonId(nextId);
+    if (nextId) {
+      setMobileView("map");
+    }
+  };
+
+  // When search completes with branches, switch to map and collapse search
+  const handleSearchSubmit = async () => {
+    await executeSearch();
+    setIsSearchCollapsed(true);
+    setMobileView("map");
+  };
 
   const handleMapClick = async (coord: LatLng) => {
     const targetPersonId =
@@ -101,7 +124,7 @@ export default function HalfwayFinderPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
       <Header
         settings={settings}
         onOpenSettings={() => setIsSettingsOpen(true)}
@@ -109,34 +132,55 @@ export default function HalfwayFinderPage() {
       />
 
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        {/* Pinning Banner on Mobile */}
+        {state.activePinPersonId && (
+          <MobilePinningBanner
+            activePerson={state.persons.find((p) => p.id === state.activePinPersonId) || null}
+            onDone={() => setActivePinPersonId(null)}
+          />
+        )}
+
         {/* Left Search / Results Sidebar */}
-        <div className="w-full md:w-[440px] md:min-w-[390px] h-[50vh] md:h-full flex flex-col border-r border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 z-10 overflow-hidden shadow-lg md:shadow-none transition-colors">
-          <div className="shrink-0">
-            <SearchForm
+        <div
+          className={`w-full md:w-[440px] md:min-w-[390px] h-full flex flex-col border-r border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 z-10 overflow-hidden shadow-lg md:shadow-none transition-colors ${
+            mobileView === "map" ? "hidden md:flex" : "flex"
+          }`}
+        >
+          {/* If results exist and search is collapsed on mobile */}
+          {state.branches.length > 0 && isSearchCollapsed ? (
+            <MobileSearchSummary
               persons={state.persons}
-              onAddPerson={addPerson}
-              onRemovePerson={removePerson}
-              onRenamePerson={renamePerson}
-              onUpdatePersonLocation={updatePersonLocation}
-              activePinPersonId={state.activePinPersonId}
-              onTogglePinPersonId={(id) =>
-                setActivePinPersonId(state.activePinPersonId === id ? null : id)
-              }
-              pointA={state.pointA}
-              pointB={state.pointB}
               query={state.query}
-              activePinMode={state.activePinMode}
-              isLoading={state.isLoading}
-              onPointAChange={setPointA}
-              onPointBChange={setPointB}
-              onQueryChange={setQuery}
-              onTogglePinMode={(mode) =>
-                setActivePinMode(state.activePinMode === mode ? null : mode)
-              }
-              onSwapPoints={swapPoints}
-              onSubmit={executeSearch}
+              onExpand={() => setIsSearchCollapsed(false)}
             />
-          </div>
+          ) : (
+            <div className="shrink-0">
+              <SearchForm
+                persons={state.persons}
+                onAddPerson={addPerson}
+                onRemovePerson={removePerson}
+                onRenamePerson={renamePerson}
+                onUpdatePersonLocation={updatePersonLocation}
+                activePinPersonId={state.activePinPersonId}
+                onTogglePinPersonId={handleTogglePinPersonId}
+                pointA={state.pointA}
+                pointB={state.pointB}
+                query={state.query}
+                activePinMode={state.activePinMode}
+                isLoading={state.isLoading}
+                onPointAChange={setPointA}
+                onPointBChange={setPointB}
+                onQueryChange={setQuery}
+                onTogglePinMode={(mode) => {
+                  const nextMode = state.activePinMode === mode ? null : mode;
+                  setActivePinMode(nextMode);
+                  if (nextMode) setMobileView("map");
+                }}
+                onSwapPoints={swapPoints}
+                onSubmit={handleSearchSubmit}
+              />
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <ResultsList
@@ -145,13 +189,21 @@ export default function HalfwayFinderPage() {
               totalDistanceAB={state.totalDistanceAB}
               highlightedBranchId={state.highlightedBranchId}
               error={state.error}
-              onHoverBranch={setHighlightedBranchId}
+              onHoverBranch={(id) => {
+                setHighlightedBranchId(id);
+                const found = state.branches.find((b) => b.id === id);
+                if (found) setSelectedBranch(found);
+              }}
             />
           </div>
         </div>
 
         {/* Right Map View */}
-        <div className="flex-1 h-[50vh] md:h-full relative overflow-hidden bg-slate-100 dark:bg-slate-950">
+        <div
+          className={`flex-1 h-full relative overflow-hidden bg-slate-100 dark:bg-slate-950 ${
+            mobileView === "list" ? "hidden md:block" : "block"
+          }`}
+        >
           <MapView
             provider={settings.activeProvider}
             googleMapsApiKey={settings.googleMapsApiKey}
@@ -164,13 +216,34 @@ export default function HalfwayFinderPage() {
             branches={state.branches}
             activePinMode={state.activePinMode}
             highlightedBranchId={state.highlightedBranchId}
+            onSelectBranch={(b) => setSelectedBranch(b)}
             onMapClick={handleMapClick}
             onMarkerDrag={handleMarkerDrag}
             onFallbackToOsm={() =>
               saveSettings({ ...settings, activeProvider: "osm" })
             }
           />
+
+          {/* Mobile Selected Branch Preview Card */}
+          {selectedBranch && mobileView === "map" && (
+            <MobileBranchPreview
+              branch={selectedBranch}
+              onClose={() => setSelectedBranch(null)}
+              onViewDetails={(b) => {
+                setSelectedBranch(b);
+                setHighlightedBranchId(b.id);
+                setMobileView("list");
+              }}
+            />
+          )}
         </div>
+
+        {/* Mobile Floating Toggle Switcher */}
+        <MobileFloatingToggle
+          activeView={mobileView}
+          onToggle={setMobileView}
+          resultCount={state.branches.length}
+        />
       </main>
 
       <SettingsModal
@@ -189,4 +262,3 @@ export default function HalfwayFinderPage() {
     </div>
   );
 }
-

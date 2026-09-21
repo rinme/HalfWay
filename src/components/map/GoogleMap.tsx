@@ -443,9 +443,7 @@ export function GoogleMap({
       });
 
       marker.addListener("click", () => {
-        if (onSelectBranchRef.current) {
-          onSelectBranchRef.current(b);
-        }
+        onSelectBranchRef.current?.(b);
         openInfoWindow(infoWindow, marker);
       });
 
