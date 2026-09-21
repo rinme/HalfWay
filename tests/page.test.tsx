@@ -180,6 +180,8 @@ function createMockElement(tag: string, doc: MockDoc): MockElement {
     getAttribute: (k: string) => {
       return el[k];
     },
+    focus: () => {},
+    blur: () => {},
   };
   return el;
 }
@@ -196,13 +198,27 @@ function createMockDoc(win: WindowMock): MockDoc {
     body,
     createElement: (tag: string) => createMockElement(tag, doc),
     createElementNS: (_ns: string, tag: string) => createMockElement(tag, doc),
-    createTextNode: (text: string) => ({
-      nodeType: 3,
-      textContent: text,
-      nodeName: "#text",
-      childNodes: [],
-      ownerDocument: doc,
-    }),
+    createTextNode: (text: string) => {
+      let val = text;
+      return {
+        nodeType: 3,
+        get textContent(): string {
+          return val;
+        },
+        set textContent(t: string) {
+          val = t;
+        },
+        get nodeValue(): string {
+          return val;
+        },
+        set nodeValue(t: string) {
+          val = t;
+        },
+        nodeName: "#text",
+        childNodes: [],
+        ownerDocument: doc,
+      };
+    },
     getElementById: (id: string) => {
       const findId = (node: MockElement): MockElement | null => {
         if (node.id === id) return node;
@@ -372,6 +388,8 @@ interface ReactProps {
   onClick?: () => void;
   onChange?: (e: { target: { value: string } }) => void;
   onFocus?: () => void;
+  onBlur?: (e?: any) => void;
+  onKeyDown?: (e?: any) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   disabled?: boolean;
@@ -472,10 +490,16 @@ const mockLeaflet = {
       }),
       on: mock((event: string, cb: any) => {
         if (event === "dragend") {
-          if (opts?.icon?.html?.includes(">A<")) {
+          markerObj.dragHandler = cb;
+          if (opts?.icon?.html?.includes(">A<") || opts?.icon?.html?.includes(">1<")) {
             leafletSpies.markerDragHandlers["A"] = cb;
-          } else if (opts?.icon?.html?.includes(">B<")) {
+            leafletSpies.markerDragHandlers["1"] = cb;
+          } else if (opts?.icon?.html?.includes(">B<") || opts?.icon?.html?.includes(">2<")) {
             leafletSpies.markerDragHandlers["B"] = cb;
+            leafletSpies.markerDragHandlers["2"] = cb;
+          }
+          if (opts?.personId) {
+            leafletSpies.markerDragHandlers[opts.personId] = cb;
           }
         }
       }),
@@ -594,10 +618,11 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
     expect(allText).toContain("OpenStreetMap");
 
     // 3. Check SearchForm inputs & buttons
-    expect(allText).toContain("Person A's Location");
-    expect(allText).toContain("Person B's Location");
+    expect(allText).toContain("Person 1");
+    expect(allText).toContain("Person 2");
+    expect(allText).toContain("+ Add Person (2/8)");
     expect(allText).toContain("Target Store or Brand");
-    expect(allText).toContain("Find Halfway Branches");
+    expect(allText).toContain("Find Midpoint Branches");
 
     // 4. Check initial ResultsList empty state
     expect(allText).toContain("No branches displayed yet");
@@ -605,8 +630,9 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
     // 5. Check MapView mounted Leaflet instance
     expect(leafletSpies.mapInstances.length).toBe(1);
 
-    // 6. SettingsModal should not be open
+    // 6. SettingsModal and ShareModal should not be open
     expect(allText).not.toContain("Map & API Settings");
+    expect(allText).not.toContain("Share Search");
 
     await act(async () => {
       root.unmount();
@@ -649,6 +675,92 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
 
     text = collectTextContent(container);
     expect(text).not.toContain("Map & API Settings");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("opens and closes ShareModal from Header share button", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    await act(async () => {
+      root.render(React.createElement(HalfwayFinderPage));
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+    const shareBtn = buttons.find((b) => getReactProps(b)?.title?.includes("shareable link"));
+    expect(shareBtn).toBeDefined();
+
+    // Open ShareModal via Header button
+    await act(async () => {
+      getReactProps(shareBtn!)?.onClick?.();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    let text = collectTextContent(container);
+    expect(text).toContain("Share Search");
+    expect(text).toContain("Link Expiration");
+    expect(text).toContain("Generate Share Link");
+
+    // Close modal via Cancel button
+    const modalButtons = findAllElements(container, (n) => n.tagName === "BUTTON");
+    const cancelBtn = modalButtons.find((b) => collectTextContent(b).trim() === "Cancel");
+    expect(cancelBtn).toBeDefined();
+
+    await act(async () => {
+      getReactProps(cancelBtn!)?.onClick?.();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    text = collectTextContent(container);
+    expect(text).not.toContain("Share Search");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("adds person when '+ Add Person' is clicked and updates participants list", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    await act(async () => {
+      root.render(React.createElement(HalfwayFinderPage));
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    let text = collectTextContent(container);
+    expect(text).toContain("Person 1");
+    expect(text).toContain("Person 2");
+    expect(text).toContain("+ Add Person (2/8)");
+
+    const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+    const addBtn = buttons.find((b) => collectTextContent(b).includes("+ Add Person"));
+    expect(addBtn).toBeDefined();
+
+    // Click "+ Add Person"
+    await act(async () => {
+      getReactProps(addBtn!)?.onClick?.();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    text = collectTextContent(container);
+    expect(text).toContain("Person 1");
+    expect(text).toContain("Person 2");
+    expect(text).toContain("Person 3");
+    expect(text).toContain("+ Add Person (3/8)");
+
+    // Since participant count is now 3 (> 2), delete buttons should be present
+    const updatedButtons = findAllElements(container, (n) => n.tagName === "BUTTON");
+    const deleteBtns = updatedButtons.filter(
+      (b) => b.getAttribute("title") === "Delete person" || b.getAttribute("aria-label") === "Delete person"
+    );
+    expect(deleteBtns.length).toBe(3);
 
     await act(async () => {
       root.unmount();
@@ -897,7 +1009,11 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
 
     // Submit button should be enabled
     const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
-    const submitBtn = buttons.find((b) => collectTextContent(b).includes("Find Halfway Branches"));
+    const submitBtn = buttons.find(
+      (b) =>
+        collectTextContent(b).includes("Find Midpoint Branches") ||
+        collectTextContent(b).includes("Find Halfway Branches")
+    );
     expect(submitBtn).toBeDefined();
     expect(getReactProps(submitBtn!)?.disabled).toBeFalsy();
 
@@ -966,7 +1082,12 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
     });
 
     const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
-    const submitBtn = buttons.find((b) => collectTextContent(b).includes("Find Halfway Branches"));
+    const submitBtn = buttons.find(
+      (b) =>
+        collectTextContent(b).includes("Find Midpoint Branches") ||
+        collectTextContent(b).includes("Find Halfway Branches")
+    );
+    expect(submitBtn).toBeDefined();
 
     await act(async () => {
       getReactProps(submitBtn!)?.onClick?.();
@@ -981,7 +1102,7 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
     });
   });
 
-  it("swaps Point A and Point B when swap button is clicked", async () => {
+  it("handles multi-person participant removal and renaming within page layout", async () => {
     const { doc } = setupDOM(
       "?a_lat=13.746&a_lng=100.534&a_name=Location+Alpha&b_lat=13.744&b_lng=100.539&b_name=Location+Beta"
     );
@@ -993,24 +1114,59 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
       await new Promise((r) => setTimeout(r, 20));
     });
 
+    // Add a 3rd person
     const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
-    const swapBtn = buttons.find((b) => getReactProps(b)?.title?.includes("Swap Point A"));
-    expect(swapBtn).toBeDefined();
+    const addBtn = buttons.find((b) => collectTextContent(b).includes("+ Add Person"));
+    expect(addBtn).toBeDefined();
 
-    // Verify initial positions
-    const inputsBefore = findAllElements(container, (n) => n.tagName === "INPUT");
-    expect(getReactProps(inputsBefore[0])?.value).toBe("Location Alpha");
-    expect(getReactProps(inputsBefore[1])?.value).toBe("Location Beta");
-
-    // Click swap
     await act(async () => {
-      getReactProps(swapBtn!)?.onClick?.();
+      getReactProps(addBtn!)?.onClick?.();
       await new Promise((r) => setTimeout(r, 0));
     });
 
-    const inputsAfter = findAllElements(container, (n) => n.tagName === "INPUT");
-    expect(getReactProps(inputsAfter[0])?.value).toBe("Location Beta");
-    expect(getReactProps(inputsAfter[1])?.value).toBe("Location Alpha");
+    let text = collectTextContent(container);
+    expect(text).toContain("Person 3");
+
+    // Rename Person 1 to "Alice"
+    const renameBtns = buttons.filter((b) =>
+      b.getAttribute("title") === "Rename person" || String(b.getAttribute("aria-label") || "").includes("Rename")
+    );
+    expect(renameBtns.length).toBeGreaterThanOrEqual(1);
+
+    await act(async () => {
+      getReactProps(renameBtns[0])?.onClick?.();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const inputs = findAllElements(container, (n) => n.tagName === "INPUT");
+    const renameInput = inputs.find((i) => getReactProps(i)?.value === "Person 1");
+    expect(renameInput).toBeDefined();
+
+    await act(async () => {
+      getReactProps(renameInput!)?.onChange?.({ target: { value: "Alice" } });
+    });
+    await act(async () => {
+      getReactProps(renameInput!)?.onBlur?.({ target: { value: "Alice" } } as any);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    text = collectTextContent(container);
+    expect(text).toContain("Alice");
+
+    // Delete Person 3
+    const deleteBtns = findAllElements(container, (n) =>
+      n.tagName === "BUTTON" && (n.getAttribute("title") === "Delete person" || n.getAttribute("aria-label") === "Delete person")
+    );
+    expect(deleteBtns.length).toBe(3);
+
+    await act(async () => {
+      getReactProps(deleteBtns[2])?.onClick?.();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    text = collectTextContent(container);
+    expect(text).not.toContain("Person 3");
+    expect(text).toContain("+ Add Person (2/8)");
 
     await act(async () => {
       root.unmount();

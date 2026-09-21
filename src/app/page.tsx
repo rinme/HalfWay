@@ -6,6 +6,7 @@ import { SearchForm } from "@/components/SearchForm";
 import { ResultsList } from "@/components/ResultsList";
 import { MapView } from "@/components/map/MapView";
 import { SettingsModal } from "@/components/SettingsModal";
+import { ShareModal } from "@/components/ShareModal";
 import { useSearchState } from "@/hooks/useSearchState";
 import { LatLng } from "@/lib/geo";
 
@@ -14,6 +15,11 @@ export default function HalfwayFinderPage() {
     state,
     settings,
     saveSettings,
+    addPerson,
+    removePerson,
+    renamePerson,
+    updatePersonLocation,
+    setActivePinPersonId,
     setPointA,
     setPointB,
     setQuery,
@@ -24,45 +30,73 @@ export default function HalfwayFinderPage() {
   } = useSearchState();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
 
   const handleMapClick = async (coord: LatLng) => {
-    if (state.activePinMode === "A") {
-      try {
-        const res = await fetch(`/api/reverse-geocode?lat=${coord.lat}&lng=${coord.lng}`);
-        const data = await res.json();
-        setPointA({ lat: coord.lat, lng: coord.lng, address: data.address || `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
-      } catch {
-        setPointA({ lat: coord.lat, lng: coord.lng, address: `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
-      }
-      setActivePinMode(state.pointB ? null : "B");
-    } else if (state.activePinMode === "B") {
-      try {
-        const res = await fetch(`/api/reverse-geocode?lat=${coord.lat}&lng=${coord.lng}`);
-        const data = await res.json();
-        setPointB({ lat: coord.lat, lng: coord.lng, address: data.address || `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
-      } catch {
-        setPointB({ lat: coord.lat, lng: coord.lng, address: `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
-      }
-      setActivePinMode(null);
-    }
-  };
+    const targetPersonId =
+      state.activePinPersonId ||
+      (state.activePinMode === "A"
+        ? state.persons[0]?.id
+        : state.activePinMode === "B"
+        ? state.persons[1]?.id
+        : null);
 
-  const handleMarkerDrag = async (point: "A" | "B", coord: LatLng) => {
+    if (!targetPersonId) return;
+
+    let address = `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}`;
     try {
       const res = await fetch(`/api/reverse-geocode?lat=${coord.lat}&lng=${coord.lng}`);
       const data = await res.json();
-      const addr = data.address || `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}`;
-      if (point === "A") {
-        setPointA({ lat: coord.lat, lng: coord.lng, address: addr });
-      } else {
-        setPointB({ lat: coord.lat, lng: coord.lng, address: addr });
+      if (data.address) {
+        address = data.address;
       }
     } catch {
-      if (point === "A") {
-        setPointA({ lat: coord.lat, lng: coord.lng, address: `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
-      } else {
-        setPointB({ lat: coord.lat, lng: coord.lng, address: `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
+      // Fallback to coordinates
+    }
+
+    updatePersonLocation(targetPersonId, {
+      lat: coord.lat,
+      lng: coord.lng,
+      address,
+    });
+
+    // Advance to next participant missing location, or clear pin mode if all have locations
+    const remainingMissing = state.persons.find(
+      (p) =>
+        p.id !== targetPersonId &&
+        (!p.address || !p.address.trim() || (p.lat === 0 && p.lng === 0))
+    );
+
+    if (remainingMissing) {
+      setActivePinPersonId(remainingMissing.id);
+    } else {
+      setActivePinPersonId(null);
+    }
+  };
+
+  const handlePersonMarkerDrag = async (personId: string, coord: LatLng) => {
+    let address = `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}`;
+    try {
+      const res = await fetch(`/api/reverse-geocode?lat=${coord.lat}&lng=${coord.lng}`);
+      const data = await res.json();
+      if (data.address) {
+        address = data.address;
       }
+    } catch {
+      // Fallback to coordinates
+    }
+
+    updatePersonLocation(personId, {
+      lat: coord.lat,
+      lng: coord.lng,
+      address,
+    });
+  };
+
+  const handleMarkerDrag = async (point: "A" | "B", coord: LatLng) => {
+    const targetId = point === "A" ? state.persons[0]?.id : state.persons[1]?.id;
+    if (targetId) {
+      await handlePersonMarkerDrag(targetId, coord);
     }
   };
 
@@ -71,6 +105,7 @@ export default function HalfwayFinderPage() {
       <Header
         settings={settings}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenShare={() => setIsShareOpen(true)}
       />
 
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
@@ -78,6 +113,15 @@ export default function HalfwayFinderPage() {
         <div className="w-full md:w-[420px] md:min-w-[380px] h-[50vh] md:h-full flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 z-10 overflow-hidden shadow-lg md:shadow-none">
           <div className="shrink-0">
             <SearchForm
+              persons={state.persons}
+              onAddPerson={addPerson}
+              onRemovePerson={removePerson}
+              onRenamePerson={renamePerson}
+              onUpdatePersonLocation={updatePersonLocation}
+              activePinPersonId={state.activePinPersonId}
+              onTogglePinPersonId={(id) =>
+                setActivePinPersonId(state.activePinPersonId === id ? null : id)
+              }
               pointA={state.pointA}
               pointB={state.pointB}
               query={state.query}
@@ -111,6 +155,9 @@ export default function HalfwayFinderPage() {
           <MapView
             provider={settings.activeProvider}
             googleMapsApiKey={settings.googleMapsApiKey}
+            persons={state.persons}
+            activePinPersonId={state.activePinPersonId}
+            onPersonMarkerDrag={handlePersonMarkerDrag}
             pointA={state.pointA}
             pointB={state.pointB}
             midpoint={state.midpoint}
@@ -131,6 +178,13 @@ export default function HalfwayFinderPage() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onSaveSettings={saveSettings}
+      />
+
+      <ShareModal
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        persons={state.persons}
+        query={state.query}
       />
     </div>
   );
