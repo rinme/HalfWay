@@ -101,7 +101,7 @@ export default function HalfwayFinderPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
       <Header
         settings={settings}
         onOpenSettings={() => setIsSettingsOpen(true)}
@@ -110,7 +110,7 @@ export default function HalfwayFinderPage() {
 
       <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         {/* Left Search / Results Sidebar */}
-        <div className="w-full md:w-[420px] md:min-w-[380px] h-[50vh] md:h-full flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 z-10 overflow-hidden shadow-lg md:shadow-none">
+        <div className="w-full md:w-[440px] md:min-w-[390px] h-[50vh] md:h-full flex flex-col border-r border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 z-10 overflow-hidden shadow-lg md:shadow-none transition-colors">
           <div className="shrink-0">
             <SearchForm
               persons={state.persons}
@@ -138,7 +138,7 @@ export default function HalfwayFinderPage() {
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
             <ResultsList
               branches={state.branches}
               midpoint={state.midpoint}
@@ -151,7 +151,7 @@ export default function HalfwayFinderPage() {
         </div>
 
         {/* Right Map View */}
-        <div className="flex-1 h-[50vh] md:h-full relative overflow-hidden">
+        <div className="flex-1 h-[50vh] md:h-full relative overflow-hidden bg-slate-100 dark:bg-slate-950">
           <MapView
             provider={settings.activeProvider}
             googleMapsApiKey={settings.googleMapsApiKey}
@@ -189,3 +189,4 @@ export default function HalfwayFinderPage() {
     </div>
   );
 }
+

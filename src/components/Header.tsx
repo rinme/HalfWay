@@ -27,37 +27,50 @@ export function Header({ settings, onOpenSettings, onOpenShare }: HeaderProps) {
     }
   };
 
+  const isGoogle = settings.activeProvider === "google";
+
   return (
-    <header className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-30">
-      <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-          <Compass className="w-5 h-5 animate-pulse" />
+    <header className="flex items-center justify-between px-5 py-3 border-b border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md sticky top-0 z-30 transition-colors">
+      <div className="flex items-center gap-3">
+        <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-slate-900 dark:bg-slate-800 text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10 transition-transform hover:scale-105">
+          <Compass className="w-4.5 h-4.5 text-indigo-400" strokeWidth={2.2} />
+          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-indigo-500 ring-2 ring-white dark:ring-slate-900" />
         </div>
         <div>
-          <h1 className="text-base font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-none">
-            HalfWay
-          </h1>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">
+              HalfWay
+            </h1>
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+              Fair Engine
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-normal tracking-normal">
             Fair venue midpoint matching
           </p>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
-        <span
-          className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${
-            settings.activeProvider === "google"
-              ? "bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-300"
-              : "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300"
+        <div
+          className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all ${
+            isGoogle
+              ? "bg-indigo-50/80 border-indigo-200 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-300"
+              : "bg-emerald-50/80 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300"
           }`}
         >
-          {settings.activeProvider === "google" ? "Google Maps" : "OpenStreetMap"}
-        </span>
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              isGoogle ? "bg-indigo-500 animate-pulse" : "bg-emerald-500"
+            }`}
+          />
+          <span>{isGoogle ? "Google Maps" : "OpenStreetMap"}</span>
+        </div>
 
         <button
           onClick={handleShare}
           title="Copy shareable link"
-          className="p-2 rounded-xl text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+          className="p-2 rounded-xl border border-slate-200/70 dark:border-slate-800 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition cursor-pointer"
         >
           {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
         </button>
@@ -65,7 +78,7 @@ export function Header({ settings, onOpenSettings, onOpenShare }: HeaderProps) {
         <button
           onClick={onOpenSettings}
           title="Settings & API Key"
-          className="p-2 rounded-xl text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
+          className="p-2 rounded-xl border border-slate-200/70 dark:border-slate-800 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition cursor-pointer"
         >
           <Settings className="w-4 h-4" />
         </button>
@@ -73,3 +86,4 @@ export function Header({ settings, onOpenSettings, onOpenShare }: HeaderProps) {
     </header>
   );
 }
+
