@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { LocationPoint } from "../src/types";
+import { LocationPoint, Person } from "../src/types";
 import { ScoredBranch, LatLng } from "../src/lib/geo";
 
 // --- Mock DOM Environment ---
@@ -322,10 +322,14 @@ const mockLeaflet = {
       }),
       on: mock((event: string, cb: Function) => {
         if (event === "dragend") {
+          markerObj.dragHandler = cb;
           if (opts?.icon?.html?.includes(">A<")) {
             leafletSpies.markerDragHandlers["A"] = cb;
           } else if (opts?.icon?.html?.includes(">B<")) {
             leafletSpies.markerDragHandlers["B"] = cb;
+          }
+          if (opts?.personId) {
+            leafletSpies.markerDragHandlers[opts.personId] = cb;
           }
         }
       }),
@@ -423,6 +427,56 @@ const mockBranches: ScoredBranch[] = [
     tier: "primary",
     googleMapsUrl:
       "https://www.google.com/maps/dir/?api=1&origin=13.746,100.534&destination=13.7445,100.5395",
+  },
+];
+
+const mock3Persons: Person[] = [
+  {
+    id: "p1",
+    name: "Alice",
+    address: "Siam Paragon, Bangkok",
+    lat: 13.746,
+    lng: 100.534,
+    color: "#10b981",
+  },
+  {
+    id: "p2",
+    name: "Bob",
+    address: "CentralWorld, Bangkok",
+    lat: 13.744,
+    lng: 100.539,
+    color: "#8b5cf6",
+  },
+  {
+    id: "p3",
+    name: "Charlie",
+    address: "MBK Center, Bangkok",
+    lat: 13.7443,
+    lng: 100.5302,
+    color: "#f59e0b",
+  },
+];
+
+const mockMultiPersonBranches: ScoredBranch[] = [
+  {
+    id: "branch-multi-1",
+    name: "True Coffee Siam Square",
+    address: "Siam Square Soi 3, Bangkok",
+    lat: 13.7448,
+    lng: 100.5332,
+    distances: [
+      { personId: "p1", name: "Alice", distance: 0.2 },
+      { personId: "p2", name: "Bob", distance: 0.6 },
+      { personId: "p3", name: "Charlie", distance: 0.3 },
+    ],
+    distA: 0.2,
+    distB: 0.6,
+    distMid: 0.15,
+    fairnessScore: 0.7,
+    spread: 0.4,
+    fairnessDelta: 0.4,
+    tier: "primary",
+    googleMapsUrl: "https://maps.google.com/?q=13.7448,100.5332",
   },
 ];
 
@@ -675,6 +729,151 @@ describe("Task 8: LeafletMap Component", () => {
     });
 
     expect(onMapClick).toHaveBeenCalledWith({ lat: 13.755, lng: 100.525 });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("renders 3+ person markers and hub-and-spoke lines to centroid in LeafletMap", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    await act(async () => {
+      root.render(
+        <LeafletMap
+          persons={mock3Persons}
+          pointA={null}
+          pointB={null}
+          midpoint={mockMidpoint}
+          branches={mockMultiPersonBranches}
+          activePinMode={null}
+          highlightedBranchId={null}
+          onMapClick={() => {}}
+          onMarkerDrag={() => {}}
+        />
+      );
+    });
+
+    // 3 person markers + 1 midpoint marker + 1 branch marker = 5 markers
+    expect(leafletSpies.markers.length).toBe(5);
+
+    // Verify each person marker exists with correct coordinates, color, and draggable=true
+    for (const person of mock3Persons) {
+      const marker = leafletSpies.markers.find(
+        (m) => m.coords[0] === person.lat && m.coords[1] === person.lng
+      );
+      expect(marker).toBeDefined();
+      expect(marker.opts.draggable).toBe(true);
+      expect(marker.opts.icon.html).toContain(person.color);
+      expect(marker.popupContent).toContain(person.name);
+      expect(marker.popupContent).toContain(person.address);
+    }
+
+    // Verify 3 hub-and-spoke dashed lines from each person to centroid midpoint
+    expect(leafletSpies.polylines.length).toBe(3);
+    for (const person of mock3Persons) {
+      const line = leafletSpies.polylines.find(
+        (l) =>
+          l.coords[0][0] === person.lat &&
+          l.coords[0][1] === person.lng &&
+          l.coords[1][0] === mockMidpoint.lat &&
+          l.coords[1][1] === mockMidpoint.lng
+      );
+      expect(line).toBeDefined();
+      expect(line.opts.dashArray).toBe("6, 6");
+      expect(line.opts.color).toBe(person.color);
+    }
+
+    // Verify midpoint circles (3km and 10km)
+    expect(leafletSpies.circles.length).toBe(2);
+    expect(leafletSpies.circles[0].opts.radius).toBe(3000);
+    expect(leafletSpies.circles[1].opts.radius).toBe(10000);
+
+    // Verify branch popup shows distance breakdown to each person
+    const branchMarker = leafletSpies.markers.find(
+      (m) =>
+        m.coords[0] === mockMultiPersonBranches[0].lat &&
+        m.coords[1] === mockMultiPersonBranches[0].lng
+    );
+    expect(branchMarker).toBeDefined();
+    expect(branchMarker.popupContent).toContain("Alice: 0.2 km");
+    expect(branchMarker.popupContent).toContain("Bob: 0.6 km");
+    expect(branchMarker.popupContent).toContain("Charlie: 0.3 km");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("calls onPersonMarkerDrag when person marker is dragged in LeafletMap", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    const onPersonMarkerDrag = mock((_id: string, _coord: LatLng) => {});
+
+    await act(async () => {
+      root.render(
+        <LeafletMap
+          persons={mock3Persons}
+          pointA={null}
+          pointB={null}
+          midpoint={mockMidpoint}
+          branches={[]}
+          activePinMode={null}
+          highlightedBranchId={null}
+          onMapClick={() => {}}
+          onMarkerDrag={() => {}}
+          onPersonMarkerDrag={onPersonMarkerDrag}
+        />
+      );
+    });
+
+    const p1Marker = leafletSpies.markers.find(
+      (m) => m.coords[0] === mock3Persons[0].lat && m.coords[1] === mock3Persons[0].lng
+    );
+    expect(p1Marker).toBeDefined();
+    expect(p1Marker.dragHandler).toBeDefined();
+
+    p1Marker.dragHandler({
+      target: {
+        getLatLng: () => ({ lat: 13.75, lng: 100.52 }),
+      },
+    });
+
+    expect(onPersonMarkerDrag).toHaveBeenCalledWith("p1", { lat: 13.75, lng: 100.52 });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("adds cursor-crosshair class when activePinPersonId is active in LeafletMap", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    await act(async () => {
+      root.render(
+        <LeafletMap
+          persons={mock3Persons}
+          pointA={null}
+          pointB={null}
+          midpoint={null}
+          branches={[]}
+          activePinMode={null}
+          activePinPersonId="p2"
+          highlightedBranchId={null}
+          onMapClick={() => {}}
+          onMarkerDrag={() => {}}
+        />
+      );
+    });
+
+    const mapDiv = container.childNodes[0];
+    expect(mapDiv.className).toContain("cursor-crosshair");
 
     await act(async () => {
       root.unmount();
@@ -1108,6 +1307,151 @@ describe("Task 8: GoogleMap Component", () => {
       root.unmount();
     });
   });
+
+  it("renders 3+ person markers, polylines to centroid, and branch infowindows in GoogleMap", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    const createdMarkers: any[] = [];
+    const createdPolylines: any[] = [];
+    const createdCircles: any[] = [];
+    const createdInfoWindows: any[] = [];
+    const markerDragListeners: Record<string, Function> = {};
+
+    const mockGoogle = {
+      maps: {
+        Map: class {
+          addListener() {}
+          fitBounds() {}
+        },
+        Marker: class {
+          opts: any;
+          listeners: Record<string, Function> = {};
+          constructor(opts: any) {
+            this.opts = opts;
+            createdMarkers.push(this);
+          }
+          addListener(evt: string, cb: Function) {
+            this.listeners[evt] = cb;
+            if (evt === "dragend") {
+              if (this.opts?.personId) markerDragListeners[this.opts.personId] = cb;
+            }
+          }
+          setMap() {}
+        },
+        Polyline: class {
+          opts: any;
+          constructor(opts: any) {
+            this.opts = opts;
+            createdPolylines.push(this);
+          }
+          setMap() {}
+        },
+        Circle: class {
+          opts: any;
+          constructor(opts: any) {
+            this.opts = opts;
+            createdCircles.push(this);
+          }
+          setMap() {}
+        },
+        InfoWindow: class {
+          opts: any;
+          content: string;
+          constructor(opts: any) {
+            this.opts = opts;
+            this.content = opts.content;
+            createdInfoWindows.push(this);
+          }
+          open() {}
+          close() {}
+        },
+        LatLngBounds: class {
+          extend() {}
+        },
+        Point: class {
+          constructor(public x: number, public y: number) {}
+        },
+      },
+    };
+
+    (window as any).google = mockGoogle;
+    const onPersonMarkerDrag = mock((_id: string, _coord: LatLng) => {});
+
+    await act(async () => {
+      root.render(
+        <GoogleMap
+          apiKey="AIzaValidKey"
+          persons={mock3Persons}
+          pointA={null}
+          pointB={null}
+          midpoint={mockMidpoint}
+          branches={mockMultiPersonBranches}
+          activePinMode={null}
+          highlightedBranchId={null}
+          onMapClick={() => {}}
+          onMarkerDrag={() => {}}
+          onPersonMarkerDrag={onPersonMarkerDrag}
+          onFallbackToOsm={() => {}}
+        />
+      );
+    });
+
+    // 3 person markers + 1 midpoint marker + 1 branch marker = 5 markers
+    expect(createdMarkers.length).toBe(5);
+
+    for (const person of mock3Persons) {
+      const marker = createdMarkers.find(
+        (m) => m.opts.position.lat === person.lat && m.opts.position.lng === person.lng
+      );
+      expect(marker).toBeDefined();
+      expect(marker.opts.draggable).toBe(true);
+      expect(marker.opts.icon.fillColor).toBe(person.color);
+      expect(marker.opts.title).toContain(person.name);
+    }
+
+    // 3 polylines to centroid
+    expect(createdPolylines.length).toBe(3);
+    for (const person of mock3Persons) {
+      const line = createdPolylines.find(
+        (l) =>
+          l.opts.path[0].lat === person.lat &&
+          l.opts.path[0].lng === person.lng &&
+          l.opts.path[1].lat === mockMidpoint.lat &&
+          l.opts.path[1].lng === mockMidpoint.lng
+      );
+      expect(line).toBeDefined();
+      expect(line.opts.strokeColor).toBe(person.color);
+    }
+
+    // Branch InfoWindow showing distances to all participants
+    const branchInfoWindow = createdInfoWindows.find((iw) =>
+      iw.content.includes(mockMultiPersonBranches[0].name)
+    );
+    expect(branchInfoWindow).toBeDefined();
+    expect(branchInfoWindow.content).toContain("Alice: 0.2 km");
+    expect(branchInfoWindow.content).toContain("Bob: 0.6 km");
+    expect(branchInfoWindow.content).toContain("Charlie: 0.3 km");
+
+    // Test marker drag on p1
+    const p1Marker = createdMarkers.find(
+      (m) => m.opts.position.lat === mock3Persons[0].lat
+    );
+    expect(p1Marker).toBeDefined();
+    expect(markerDragListeners["p1"]).toBeDefined();
+    markerDragListeners["p1"]({
+      latLng: {
+        lat: () => 13.747,
+        lng: () => 100.535,
+      },
+    });
+    expect(onPersonMarkerDrag).toHaveBeenCalledWith("p1", { lat: 13.747, lng: 100.535 });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });
 
 describe("Task 8: MapView Component", () => {
@@ -1210,4 +1554,112 @@ describe("Task 8: MapView Component", () => {
       root.unmount();
     });
   });
+
+  it("passes multi-person props to LeafletMap when provider is osm", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    const onPersonMarkerDrag = mock(() => {});
+
+    await act(async () => {
+      root.render(
+        <MapView
+          provider="osm"
+          googleMapsApiKey=""
+          persons={mock3Persons}
+          pointA={null}
+          pointB={null}
+          midpoint={mockMidpoint}
+          branches={mockMultiPersonBranches}
+          activePinMode={null}
+          activePinPersonId="p1"
+          highlightedBranchId={null}
+          onMapClick={() => {}}
+          onMarkerDrag={() => {}}
+          onPersonMarkerDrag={onPersonMarkerDrag}
+          onFallbackToOsm={() => {}}
+        />
+      );
+    });
+
+    expect(leafletSpies.mapInstances.length).toBe(1);
+    // 3 person markers + 1 midpoint + 1 branch = 5 markers
+    expect(leafletSpies.markers.length).toBe(5);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("passes multi-person props to GoogleMap when provider is google and apiKey is provided", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    const createdMarkers: any[] = [];
+    const mockGoogle = {
+      maps: {
+        Map: class {
+          addListener() {}
+          fitBounds() {}
+        },
+        Marker: class {
+          opts: any;
+          constructor(opts: any) {
+            this.opts = opts;
+            createdMarkers.push(this);
+          }
+          addListener() {}
+          setMap() {}
+        },
+        Polyline: class {
+          setMap() {}
+        },
+        Circle: class {
+          setMap() {}
+        },
+        InfoWindow: class {
+          open() {}
+          close() {}
+        },
+        LatLngBounds: class {
+          extend() {}
+        },
+        Point: class {
+          constructor(public x: number, public y: number) {}
+        },
+      },
+    };
+    (window as any).google = mockGoogle;
+
+    await act(async () => {
+      root.render(
+        <MapView
+          provider="google"
+          googleMapsApiKey="AIzaTestKeyValid"
+          persons={mock3Persons}
+          pointA={null}
+          pointB={null}
+          midpoint={mockMidpoint}
+          branches={mockMultiPersonBranches}
+          activePinMode={null}
+          activePinPersonId="p2"
+          highlightedBranchId={null}
+          onMapClick={() => {}}
+          onMarkerDrag={() => {}}
+          onPersonMarkerDrag={() => {}}
+          onFallbackToOsm={() => {}}
+        />
+      );
+    });
+
+    // 3 person markers + 1 midpoint + 1 branch = 5 markers
+    expect(createdMarkers.length).toBe(5);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });
+

@@ -2,7 +2,7 @@
 
 import React from "react";
 import dynamic from "next/dynamic";
-import { LocationPoint, MapProvider } from "@/types";
+import { LocationPoint, MapProvider, Person } from "@/types";
 import { ScoredBranch, LatLng } from "@/lib/geo";
 
 const LeafletMap = dynamic(
@@ -32,14 +32,20 @@ const GoogleMap = dynamic(
 export interface MapViewProps {
   provider: MapProvider;
   googleMapsApiKey: string;
-  pointA: LocationPoint | null;
-  pointB: LocationPoint | null;
+  // Multi-person props
+  persons?: Person[];
+  activePinPersonId?: string | null;
+  onPersonMarkerDrag?: (personId: string, coord: LatLng) => void;
+  // Backward compatibility props
+  pointA?: LocationPoint | null;
+  pointB?: LocationPoint | null;
+  activePinMode?: "A" | "B" | null;
+  onMarkerDrag?: (point: "A" | "B", coord: LatLng) => void;
+  // Shared props
   midpoint: LatLng | null;
   branches: ScoredBranch[];
-  activePinMode: "A" | "B" | null;
   highlightedBranchId: string | null;
   onMapClick: (coord: LatLng) => void;
-  onMarkerDrag: (point: "A" | "B", coord: LatLng) => void;
   onFallbackToOsm: () => void;
 }
 
@@ -48,14 +54,17 @@ export function MapView(props: MapViewProps) {
     return (
       <GoogleMap
         apiKey={props.googleMapsApiKey}
-        pointA={props.pointA}
-        pointB={props.pointB}
+        persons={props.persons}
+        activePinPersonId={props.activePinPersonId}
+        onPersonMarkerDrag={props.onPersonMarkerDrag}
+        pointA={props.pointA ?? null}
+        pointB={props.pointB ?? null}
         midpoint={props.midpoint}
         branches={props.branches}
-        activePinMode={props.activePinMode}
+        activePinMode={props.activePinMode ?? null}
         highlightedBranchId={props.highlightedBranchId}
         onMapClick={props.onMapClick}
-        onMarkerDrag={props.onMarkerDrag}
+        onMarkerDrag={props.onMarkerDrag ?? (() => {})}
         onFallbackToOsm={props.onFallbackToOsm}
       />
     );
@@ -63,14 +72,17 @@ export function MapView(props: MapViewProps) {
 
   return (
     <LeafletMap
-      pointA={props.pointA}
-      pointB={props.pointB}
+      persons={props.persons}
+      activePinPersonId={props.activePinPersonId}
+      onPersonMarkerDrag={props.onPersonMarkerDrag}
+      pointA={props.pointA ?? null}
+      pointB={props.pointB ?? null}
       midpoint={props.midpoint}
       branches={props.branches}
-      activePinMode={props.activePinMode}
+      activePinMode={props.activePinMode ?? null}
       highlightedBranchId={props.highlightedBranchId}
       onMapClick={props.onMapClick}
-      onMarkerDrag={props.onMarkerDrag}
+      onMarkerDrag={props.onMarkerDrag ?? (() => {})}
     />
   );
 }

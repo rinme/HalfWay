@@ -1,24 +1,58 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { LocationPoint } from "@/types";
+import { LocationPoint, Person } from "@/types";
 import { ScoredBranch, LatLng } from "@/lib/geo";
 
 export interface GoogleMapProps {
   apiKey: string;
-  pointA: LocationPoint | null;
-  pointB: LocationPoint | null;
+  // Multi-person props
+  persons?: Person[];
+  activePinPersonId?: string | null;
+  onPersonMarkerDrag?: (personId: string, coord: LatLng) => void;
+  // Backward compatibility props
+  pointA?: LocationPoint | null;
+  pointB?: LocationPoint | null;
   midpoint: LatLng | null;
   branches: ScoredBranch[];
-  activePinMode: "A" | "B" | null;
+  activePinMode?: "A" | "B" | null;
   highlightedBranchId: string | null;
   onMapClick: (coord: LatLng) => void;
-  onMarkerDrag: (point: "A" | "B", coord: LatLng) => void;
+  onMarkerDrag?: (point: "A" | "B", coord: LatLng) => void;
   onFallbackToOsm: () => void;
+}
+
+const DEFAULT_COLORS = [
+  "#10b981", // Emerald
+  "#8b5cf6", // Violet
+  "#f59e0b", // Amber
+  "#ef4444", // Red
+  "#3b82f6", // Blue
+  "#ec4899", // Pink
+  "#14b8a6", // Teal
+  "#f97316", // Orange
+];
+
+function getPersonLabel(person: Person, idx: number): string {
+  if (!person.name || !person.name.trim()) {
+    return String(idx + 1);
+  }
+  const trimmed = person.name.trim();
+  const personNumMatch = trimmed.match(/^Person\s*(\d+)$/i);
+  if (personNumMatch) {
+    return personNumMatch[1];
+  }
+  if (trimmed.length <= 2) {
+    return trimmed.toUpperCase();
+  }
+  return trimmed.charAt(0).toUpperCase();
 }
 
 export function GoogleMap({
   apiKey,
+  persons,
+  activePinPersonId,
+  onPersonMarkerDrag,
   pointA,
   pointB,
   midpoint,
@@ -40,6 +74,9 @@ export function GoogleMap({
 
   const onMarkerDragRef = useRef(onMarkerDrag);
   onMarkerDragRef.current = onMarkerDrag;
+
+  const onPersonMarkerDragRef = useRef(onPersonMarkerDrag);
+  onPersonMarkerDragRef.current = onPersonMarkerDrag;
 
   const onFallbackToOsmRef = useRef(onFallbackToOsm);
   onFallbackToOsmRef.current = onFallbackToOsm;
@@ -104,8 +141,14 @@ export function GoogleMap({
     const google = (window as any).google;
     if (!google?.maps) return;
 
-    const initialLat = pointA?.lat || 13.7563;
-    const initialLng = pointA?.lng || 100.5018;
+    const firstPerson = persons?.find(
+      (p) =>
+        typeof p.lat === "number" &&
+        typeof p.lng === "number" &&
+        (p.lat !== 0 || p.lng !== 0)
+    );
+    const initialLat = firstPerson?.lat || pointA?.lat || midpoint?.lat || 13.7563;
+    const initialLng = firstPerson?.lng || pointA?.lng || midpoint?.lng || 100.5018;
 
     const map = new google.maps.Map(mapContainerRef.current, {
       center: { lat: initialLat, lng: initialLng },
@@ -114,7 +157,10 @@ export function GoogleMap({
 
     map.addListener("click", (e: any) => {
       if (e.latLng) {
-        onMapClickRef.current({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+        onMapClickRef.current({
+          lat: typeof e.latLng.lat === "function" ? e.latLng.lat() : e.latLng.lat,
+          lng: typeof e.latLng.lng === "function" ? e.latLng.lng() : e.latLng.lng,
+        });
       }
     });
 
@@ -162,75 +208,145 @@ export function GoogleMap({
       labelOrigin: new google.maps.Point(12, 9),
     });
 
-    // Marker A
-    if (pointA) {
-      const pos = { lat: pointA.lat, lng: pointA.lng };
-      bounds.extend(pos);
-      pointCount++;
+    if (persons) {
+      // Multi-person mode
+      const validPersons = persons.filter(
+        (p) =>
+          p != null &&
+          typeof p.lat === "number" &&
+          typeof p.lng === "number" &&
+          !isNaN(p.lat) &&
+          !isNaN(p.lng) &&
+          (p.lat !== 0 || p.lng !== 0)
+      );
 
-      const markerA = new google.maps.Marker({
-        position: pos,
-        map,
-        draggable: true,
-        title: "Point A",
-        icon: createPinSymbol("#10b981"),
-        label: { text: "A", color: "#ffffff", fontWeight: "bold", fontSize: "11px" },
+      validPersons.forEach((person, idx) => {
+        const pos = { lat: person.lat, lng: person.lng };
+        bounds.extend(pos);
+        pointCount++;
+
+        const color = person.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length];
+        const label = getPersonLabel(person, idx);
+
+        const marker = new google.maps.Marker({
+          position: pos,
+          map,
+          draggable: true,
+          personId: person.id,
+          title: person.name || `Person ${idx + 1}`,
+          icon: createPinSymbol(color),
+          label: { text: label, color: "#ffffff", fontWeight: "bold", fontSize: "11px" },
+        });
+        overlaysRef.current.push(marker);
+
+        const info = new google.maps.InfoWindow({
+          content: `<strong>${person.name || `Person ${idx + 1}`}</strong><br/>${person.address}`,
+        });
+        marker.addListener("click", () => openInfoWindow(info, marker));
+
+        marker.addListener("dragend", (e: any) => {
+          if (e.latLng && onPersonMarkerDragRef.current) {
+            onPersonMarkerDragRef.current(person.id, {
+              lat: typeof e.latLng.lat === "function" ? e.latLng.lat() : e.latLng.lat,
+              lng: typeof e.latLng.lng === "function" ? e.latLng.lng() : e.latLng.lng,
+            });
+          }
+        });
       });
-      overlaysRef.current.push(markerA);
 
-      const infoA = new google.maps.InfoWindow({
-        content: `<strong>Point A</strong><br/>${pointA.address}`,
-      });
-      markerA.addListener("click", () => openInfoWindow(infoA, markerA));
+      // Hub-and-spoke dashed colored polylines from each person to centroid midpoint
+      if (midpoint) {
+        validPersons.forEach((person, idx) => {
+          const color = person.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length];
+          const line = new google.maps.Polyline({
+            path: [
+              { lat: person.lat, lng: person.lng },
+              { lat: midpoint.lat, lng: midpoint.lng },
+            ],
+            strokeColor: color,
+            strokeOpacity: 0.7,
+            strokeWeight: 3,
+            map,
+          });
+          overlaysRef.current.push(line);
+        });
+      }
+    } else {
+      // Legacy Point A / Point B mode
+      if (pointA) {
+        const pos = { lat: pointA.lat, lng: pointA.lng };
+        bounds.extend(pos);
+        pointCount++;
 
-      markerA.addListener("dragend", (e: any) => {
-        if (e.latLng) {
-          onMarkerDragRef.current("A", { lat: e.latLng.lat(), lng: e.latLng.lng() });
-        }
-      });
-    }
+        const markerA = new google.maps.Marker({
+          position: pos,
+          map,
+          draggable: true,
+          title: "Point A",
+          icon: createPinSymbol("#10b981"),
+          label: { text: "A", color: "#ffffff", fontWeight: "bold", fontSize: "11px" },
+        });
+        overlaysRef.current.push(markerA);
 
-    // Marker B
-    if (pointB) {
-      const pos = { lat: pointB.lat, lng: pointB.lng };
-      bounds.extend(pos);
-      pointCount++;
+        const infoA = new google.maps.InfoWindow({
+          content: `<strong>Point A</strong><br/>${pointA.address}`,
+        });
+        markerA.addListener("click", () => openInfoWindow(infoA, markerA));
 
-      const markerB = new google.maps.Marker({
-        position: pos,
-        map,
-        draggable: true,
-        title: "Point B",
-        icon: createPinSymbol("#8b5cf6"),
-        label: { text: "B", color: "#ffffff", fontWeight: "bold", fontSize: "11px" },
-      });
-      overlaysRef.current.push(markerB);
+        markerA.addListener("dragend", (e: any) => {
+          if (e.latLng && onMarkerDragRef.current) {
+            onMarkerDragRef.current("A", {
+              lat: typeof e.latLng.lat === "function" ? e.latLng.lat() : e.latLng.lat,
+              lng: typeof e.latLng.lng === "function" ? e.latLng.lng() : e.latLng.lng,
+            });
+          }
+        });
+      }
 
-      const infoB = new google.maps.InfoWindow({
-        content: `<strong>Point B</strong><br/>${pointB.address}`,
-      });
-      markerB.addListener("click", () => openInfoWindow(infoB, markerB));
+      if (pointB) {
+        const pos = { lat: pointB.lat, lng: pointB.lng };
+        bounds.extend(pos);
+        pointCount++;
 
-      markerB.addListener("dragend", (e: any) => {
-        if (e.latLng) {
-          onMarkerDragRef.current("B", { lat: e.latLng.lat(), lng: e.latLng.lng() });
-        }
-      });
-    }
+        const markerB = new google.maps.Marker({
+          position: pos,
+          map,
+          draggable: true,
+          title: "Point B",
+          icon: createPinSymbol("#8b5cf6"),
+          label: { text: "B", color: "#ffffff", fontWeight: "bold", fontSize: "11px" },
+        });
+        overlaysRef.current.push(markerB);
 
-    // Polyline connecting A and B
-    if (pointA && pointB) {
-      const line = new google.maps.Polyline({
-        path: [
-          { lat: pointA.lat, lng: pointA.lng },
-          { lat: pointB.lat, lng: pointB.lng },
-        ],
-        strokeColor: "#6366f1",
-        strokeOpacity: 0.7,
-        strokeWeight: 3,
-        map,
-      });
-      overlaysRef.current.push(line);
+        const infoB = new google.maps.InfoWindow({
+          content: `<strong>Point B</strong><br/>${pointB.address}`,
+        });
+        markerB.addListener("click", () => openInfoWindow(infoB, markerB));
+
+        markerB.addListener("dragend", (e: any) => {
+          if (e.latLng && onMarkerDragRef.current) {
+            onMarkerDragRef.current("B", {
+              lat: typeof e.latLng.lat === "function" ? e.latLng.lat() : e.latLng.lat,
+              lng: typeof e.latLng.lng === "function" ? e.latLng.lng() : e.latLng.lng,
+            });
+          }
+        });
+      }
+
+      // Polyline connecting A and B
+      if (pointA && pointB) {
+        const line = new google.maps.Polyline({
+          path: [
+            { lat: pointA.lat, lng: pointA.lng },
+            { lat: pointB.lat, lng: pointB.lng },
+          ],
+          strokeColor: "#6366f1",
+          strokeOpacity: 0.7,
+          strokeWeight: 3,
+          map,
+        });
+        overlaysRef.current.push(line);
+      }
     }
 
     // Midpoint and radius circles
@@ -298,10 +414,15 @@ export function GoogleMap({
       });
       overlaysRef.current.push(marker);
 
+      const distanceBreakdown =
+        b.distances && b.distances.length > 0
+          ? b.distances.map((d) => `${d.name}: ${d.distance} km`).join(" | ")
+          : `To A: ${b.distA ?? 0} km | To B: ${b.distB ?? 0} km`;
+
       const infoWindow = new google.maps.InfoWindow({
         content:
           `<strong>#${idx + 1} ${b.name}</strong><br/>${b.address}<br/><br/>` +
-          `To A: ${b.distA} km | To B: ${b.distB} km<br/>` +
+          `${distanceBreakdown}<br/>` +
           `Fairness: <strong>${b.fairnessScore} km</strong><br/><br/>` +
           `<a href="${b.googleMapsUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline;">Open Directions</a>`,
       });
@@ -343,13 +464,13 @@ export function GoogleMap({
       overlaysRef.current.forEach((overlay) => overlay.setMap(null));
       overlaysRef.current = [];
     };
-  }, [isLoaded, pointA, pointB, midpoint, branches, highlightedBranchId]);
+  }, [isLoaded, persons, pointA, pointB, midpoint, branches, highlightedBranchId]);
 
   return (
     <div
       ref={mapContainerRef}
       className={`w-full h-full relative z-0 ${
-        activePinMode ? "cursor-crosshair" : ""
+        activePinMode || activePinPersonId ? "cursor-crosshair" : ""
       }`}
     />
   );
