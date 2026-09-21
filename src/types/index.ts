@@ -25,9 +25,9 @@ export interface AppSettings {
 export interface SearchState {
   persons: Person[];
   activePinPersonId: string | null;
-  pointA?: LocationPoint | null;
-  pointB?: LocationPoint | null;
-  activePinMode?: "A" | "B" | null;
+  pointA: LocationPoint | null;
+  pointB: LocationPoint | null;
+  activePinMode: "A" | "B" | null;
   query: string;
   branches: ScoredBranch[];
   midpoint: LatLng | null;

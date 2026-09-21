@@ -18,7 +18,7 @@ export const PERSON_COLORS = [
 export function useSearchState() {
   const [settings, setSettings] = useState<AppSettings>(() => {
     const envKey =
-      (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) || "";
+      (typeof process !== "undefined" && process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) || "";
     return {
       googleMapsApiKey: "",
       activeProvider: envKey ? "google" : "osm",
@@ -49,7 +49,7 @@ export function useSearchState() {
       const savedKey = localStorage.getItem("halfway_google_maps_key") || "";
       const savedProvider = localStorage.getItem("halfway_active_provider") as MapProvider | null;
       const envKey =
-        (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) || "";
+        (typeof process !== "undefined" && process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) || "";
 
       let activeProvider: MapProvider = "osm";
       if (savedProvider) {
@@ -111,8 +111,8 @@ export function useSearchState() {
         ...prev,
         persons: updatedPersons,
         activePinPersonId: updatedActivePinId,
-        pointA: p0 && p0.address ? { address: p0.address, lat: p0.lat, lng: p0.lng } : prev.pointA,
-        pointB: p1 && p1.address ? { address: p1.address, lat: p1.lat, lng: p1.lng } : prev.pointB,
+        pointA: p0 && p0.address ? { address: p0.address, lat: p0.lat, lng: p0.lng } : null,
+        pointB: p1 && p1.address ? { address: p1.address, lat: p1.lat, lng: p1.lng } : null,
         activePinMode:
           updatedActivePinId === p0?.id ? "A" : updatedActivePinId === p1?.id ? "B" : null,
       };
@@ -251,15 +251,17 @@ export function useSearchState() {
   }, []);
 
   const executeSearch = useCallback(async () => {
-    const hasValidLegacy = state.pointA && state.pointB;
-    const hasValidPersons =
+    const allPersonsValid =
       state.persons.length >= 2 &&
-      state.persons.every((p) => p.address && (p.lat !== 0 || p.lng !== 0));
+      state.persons.every((p) => p.address && p.address.trim() && (p.lat !== 0 || p.lng !== 0));
 
-    if (!state.query.trim() || (!hasValidLegacy && !hasValidPersons)) {
+    if (!state.query.trim() || !allPersonsValid) {
       setState((prev) => ({
         ...prev,
-        error: "Please provide Point A, Point B, and a target venue/brand name.",
+        error:
+          state.persons.length > 2
+            ? "Please provide a location for all participants and a target venue/brand name."
+            : "Please provide Point A, Point B, and a target venue/brand name.",
       }));
       return;
     }

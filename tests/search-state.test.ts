@@ -1294,6 +1294,39 @@ describe("Multi-Person State Management (Task 4)", () => {
 
     await unmount();
   });
+
+  it("executeSearch rejects search if a 3rd person has an empty address", async () => {
+    const { result, act: actHook, unmount } = await renderHook(() => useSearchState());
+
+    await actHook(() => {
+      result.current.addPerson();
+    });
+
+    await actHook(() => {
+      result.current.updatePersonLocation(result.current.state.persons[0].id, {
+        address: "Point 1",
+        lat: 13.75,
+        lng: 100.5,
+      });
+      result.current.updatePersonLocation(result.current.state.persons[1].id, {
+        address: "Point 2",
+        lat: 13.72,
+        lng: 100.52,
+      });
+      // 3rd person left blank
+      result.current.setQuery("Specialty Coffee");
+    });
+
+    await actHook(async () => {
+      await result.current.executeSearch();
+    });
+
+    expect(result.current.state.error).toBe(
+      "Please provide a location for all participants and a target venue/brand name."
+    );
+
+    await unmount();
+  });
 });
 
 describe("Task 4: ShareModal Component", () => {

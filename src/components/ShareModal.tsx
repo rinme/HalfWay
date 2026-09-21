@@ -24,6 +24,14 @@ export function ShareModal({ isOpen, onClose, persons, query }: ShareModalProps)
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setShareUrl("");
+      setError(null);
+      setCopied(false);
+    }
+  }, [isOpen, persons, query]);
+
   if (!isOpen) return null;
 
   const handleGenerateLink = async () => {
