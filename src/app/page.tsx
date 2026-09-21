@@ -1,69 +1,137 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useState } from "react";
+import { Header } from "@/components/Header";
+import { SearchForm } from "@/components/SearchForm";
+import { ResultsList } from "@/components/ResultsList";
+import { MapView } from "@/components/map/MapView";
+import { SettingsModal } from "@/components/SettingsModal";
+import { useSearchState } from "@/hooks/useSearchState";
+import { LatLng } from "@/lib/geo";
+
+export default function HalfwayFinderPage() {
+  const {
+    state,
+    settings,
+    saveSettings,
+    setPointA,
+    setPointB,
+    setQuery,
+    setActivePinMode,
+    setHighlightedBranchId,
+    swapPoints,
+    executeSearch,
+  } = useSearchState();
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const handleMapClick = async (coord: LatLng) => {
+    if (state.activePinMode === "A") {
+      try {
+        const res = await fetch(`/api/reverse-geocode?lat=${coord.lat}&lng=${coord.lng}`);
+        const data = await res.json();
+        setPointA({ lat: coord.lat, lng: coord.lng, address: data.address || `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
+      } catch {
+        setPointA({ lat: coord.lat, lng: coord.lng, address: `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
+      }
+      setActivePinMode(state.pointB ? null : "B");
+    } else if (state.activePinMode === "B") {
+      try {
+        const res = await fetch(`/api/reverse-geocode?lat=${coord.lat}&lng=${coord.lng}`);
+        const data = await res.json();
+        setPointB({ lat: coord.lat, lng: coord.lng, address: data.address || `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
+      } catch {
+        setPointB({ lat: coord.lat, lng: coord.lng, address: `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
+      }
+      setActivePinMode(null);
+    }
+  };
+
+  const handleMarkerDrag = async (point: "A" | "B", coord: LatLng) => {
+    try {
+      const res = await fetch(`/api/reverse-geocode?lat=${coord.lat}&lng=${coord.lng}`);
+      const data = await res.json();
+      const addr = data.address || `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}`;
+      if (point === "A") {
+        setPointA({ lat: coord.lat, lng: coord.lng, address: addr });
+      } else {
+        setPointB({ lat: coord.lat, lng: coord.lng, address: addr });
+      }
+    } catch {
+      if (point === "A") {
+        setPointA({ lat: coord.lat, lng: coord.lng, address: `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
+      } else {
+        setPointB({ lat: coord.lat, lng: coord.lng, address: `${coord.lat.toFixed(4)}, ${coord.lng.toFixed(4)}` });
+      }
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+      <Header
+        settings={settings}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
+
+      <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        {/* Left Search / Results Sidebar */}
+        <div className="w-full md:w-[420px] md:min-w-[380px] h-[50vh] md:h-full flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 z-10 overflow-hidden shadow-lg md:shadow-none">
+          <div className="shrink-0">
+            <SearchForm
+              pointA={state.pointA}
+              pointB={state.pointB}
+              query={state.query}
+              activePinMode={state.activePinMode}
+              isLoading={state.isLoading}
+              onPointAChange={setPointA}
+              onPointBChange={setPointB}
+              onQueryChange={setQuery}
+              onTogglePinMode={(mode) =>
+                setActivePinMode(state.activePinMode === mode ? null : mode)
+              }
+              onSwapPoints={swapPoints}
+              onSubmit={executeSearch}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            <ResultsList
+              branches={state.branches}
+              midpoint={state.midpoint}
+              totalDistanceAB={state.totalDistanceAB}
+              highlightedBranchId={state.highlightedBranchId}
+              error={state.error}
+              onHoverBranch={setHighlightedBranchId}
+            />
+          </div>
+        </div>
+
+        {/* Right Map View */}
+        <div className="flex-1 h-[50vh] md:h-full relative overflow-hidden">
+          <MapView
+            provider={settings.activeProvider}
+            googleMapsApiKey={settings.googleMapsApiKey}
+            pointA={state.pointA}
+            pointB={state.pointB}
+            midpoint={state.midpoint}
+            branches={state.branches}
+            activePinMode={state.activePinMode}
+            highlightedBranchId={state.highlightedBranchId}
+            onMapClick={handleMapClick}
+            onMarkerDrag={handleMarkerDrag}
+            onFallbackToOsm={() =>
+              saveSettings({ ...settings, activeProvider: "osm" })
+            }
+          />
         </div>
       </main>
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onSaveSettings={saveSettings}
+      />
     </div>
   );
 }
