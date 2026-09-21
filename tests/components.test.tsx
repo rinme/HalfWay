@@ -334,10 +334,15 @@ const mockBranch1: ScoredBranch = {
   address: "991 Rama I Rd, Pathum Wan, Bangkok",
   lat: 13.746,
   lng: 100.534,
+  distances: [
+    { personId: "p1", name: "Person A", distance: 3.2 },
+    { personId: "p2", name: "Person B", distance: 3.5 },
+  ],
   distA: 3.2,
   distB: 3.5,
   distMid: 0.25,
   fairnessScore: 7.3,
+  spread: 0.3,
   fairnessDelta: 0.3,
   tier: "primary",
   googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=13.746,100.534",
@@ -349,13 +354,36 @@ const mockBranch2: ScoredBranch = {
   address: "999/9 Rama I Rd, Pathum Wan, Bangkok",
   lat: 13.744,
   lng: 100.539,
+  distances: [
+    { personId: "p1", name: "Person A", distance: 4.8 },
+    { personId: "p2", name: "Person B", distance: 2.1 },
+  ],
   distA: 4.8,
   distB: 2.1,
   distMid: 1.4,
   fairnessScore: 12.3,
+  spread: 2.7,
   fairnessDelta: 2.7,
   tier: "extended",
   googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=13.744,100.539",
+};
+
+const mockBranch3People: ScoredBranch = {
+  id: "branch-3",
+  name: "Starbucks EmQuartier",
+  address: "693 Sukhumvit Rd, Khlong Tan Nuea, Bangkok",
+  lat: 13.731,
+  lng: 100.569,
+  distances: [
+    { personId: "p1", name: "Alice", distance: 2.1 },
+    { personId: "p2", name: "Bob", distance: 3.4 },
+    { personId: "p3", name: "Charlie", distance: 1.8 },
+  ],
+  distMid: 0.45,
+  fairnessScore: 10.5,
+  spread: 1.6,
+  tier: "primary",
+  googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=13.731,100.569",
 };
 
 describe("Task 7: Split Layout & UI Components", () => {
@@ -1501,6 +1529,92 @@ describe("Task 7: Split Layout & UI Components", () => {
         root.unmount();
       });
     });
+
+    it("renders multi-person distance cards for 3+ people with names, distances, spread, and color dots", async () => {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+
+      await act(async () => {
+        root.render(
+          React.createElement(ResultCard, {
+            branch: mockBranch3People,
+            rank: 1,
+            isHighlighted: false,
+            onHover: () => {},
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const text = collectTextContent(container);
+      expect(text).toContain("Starbucks EmQuartier");
+      expect(text).toContain("Alice");
+      expect(text).toContain("2.1 km");
+      expect(text).toContain("Bob");
+      expect(text).toContain("3.4 km");
+      expect(text).toContain("Charlie");
+      expect(text).toContain("1.8 km");
+      expect(text).toContain("±1.6 km");
+      expect(text).toContain("Fairness: 10.5 km");
+
+      // Verify color dots are rendered for each participant
+      const dots = findAllElements(container, (n) => {
+        const style = n.style as Record<string, unknown>;
+        return typeof style?.backgroundColor === "string" && style.backgroundColor.length > 0;
+      });
+      expect(dots.length).toBeGreaterThanOrEqual(3);
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
+    it("falls back gracefully to legacy distA, distB, and fairnessDelta when distances is absent", async () => {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+
+      const legacyBranch = {
+        id: "branch-legacy",
+        name: "Legacy Cafe",
+        address: "123 Old St, Bangkok",
+        lat: 13.74,
+        lng: 100.53,
+        distA: 2.5,
+        distB: 3.1,
+        distMid: 0.8,
+        fairnessScore: 6.8,
+        spread: 0.6,
+        fairnessDelta: 0.6,
+        tier: "primary" as const,
+        googleMapsUrl: "https://www.google.com/maps/search/?api=1&query=13.74,100.53",
+      } as unknown as ScoredBranch;
+
+      await act(async () => {
+        root.render(
+          React.createElement(ResultCard, {
+            branch: legacyBranch,
+            rank: 1,
+            isHighlighted: false,
+            onHover: () => {},
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const text = collectTextContent(container);
+      expect(text).toContain("Legacy Cafe");
+      expect(text).toContain("To Person A");
+      expect(text).toContain("2.5 km");
+      expect(text).toContain("To Person B");
+      expect(text).toContain("3.1 km");
+      expect(text).toContain("±0.6 km");
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
   });
 
   // ==========================================
@@ -1555,7 +1669,7 @@ describe("Task 7: Split Layout & UI Components", () => {
 
       const text = collectTextContent(container);
       expect(text).toContain("No branches displayed yet");
-      expect(text).toContain("Enter Point A, Point B, and click \"Find Halfway Branches\".");
+      expect(text).toContain("Enter participant locations and click \"Find Midpoint Branches\".");
 
       await act(async () => {
         root.unmount();
@@ -1591,6 +1705,36 @@ describe("Task 7: Split Layout & UI Components", () => {
       expect(text).toContain("2 branches found");
       expect(text).toContain("Starbucks Siam Paragon");
       expect(text).toContain("Starbucks CentralWorld");
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
+    it("renders midpoint summary with formatted coordinates and branch count", async () => {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+
+      const midpoint: LatLng = { lat: 13.7456, lng: 100.5367 };
+
+      await act(async () => {
+        root.render(
+          React.createElement(ResultsList, {
+            branches: [mockBranch1, mockBranch2],
+            midpoint,
+            totalDistanceAB: null,
+            highlightedBranchId: null,
+            error: null,
+            onHoverBranch: () => {},
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const text = collectTextContent(container);
+      expect(text).toContain("Midpoint: 13.7456, 100.5367");
+      expect(text).toContain("2 branches found");
 
       await act(async () => {
         root.unmount();

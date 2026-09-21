@@ -390,10 +390,15 @@ const mockBranches: ScoredBranch[] = [
     address: "991 Rama I Rd, Bangkok",
     lat: 13.7462,
     lng: 100.5345,
+    distances: [
+      { personId: "p1", name: "Person A", distance: 0.1 },
+      { personId: "p2", name: "Person B", distance: 0.5 },
+    ],
     distA: 0.1,
     distB: 0.5,
     distMid: 0.25,
     fairnessScore: 1.4,
+    spread: 0.4,
     fairnessDelta: 0.4,
     tier: "primary",
     googleMapsUrl:
@@ -405,10 +410,15 @@ const mockBranches: ScoredBranch[] = [
     address: "4 Ratchadamri Rd, Bangkok",
     lat: 13.7445,
     lng: 100.5395,
+    distances: [
+      { personId: "p1", name: "Person A", distance: 0.6 },
+      { personId: "p2", name: "Person B", distance: 0.1 },
+    ],
     distA: 0.6,
     distB: 0.1,
     distMid: 0.35,
     fairnessScore: 1.7,
+    spread: 0.5,
     fairnessDelta: 0.5,
     tier: "primary",
     googleMapsUrl:

@@ -16,7 +16,7 @@ interface ResultsListProps {
 
 export function ResultsList({
   branches,
-  midpoint: _midpoint,
+  midpoint,
   totalDistanceAB,
   highlightedBranchId,
   error,
@@ -40,7 +40,7 @@ export function ResultsList({
           No branches displayed yet
         </p>
         <p className="text-[11px] mt-1 text-zinc-400">
-          Enter Point A, Point B, and click &quot;Find Halfway Branches&quot;.
+          Enter participant locations and click &quot;Find Midpoint Branches&quot;.
         </p>
       </div>
     );
@@ -48,11 +48,20 @@ export function ResultsList({
 
   return (
     <div className="p-5 space-y-3">
-      {totalDistanceAB !== null && (
+      {(midpoint || totalDistanceAB !== null) && (
         <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-[11px]">
           <div className="flex items-center gap-1.5 font-medium">
             <Info className="w-3.5 h-3.5 text-indigo-500" />
-            <span>Distance A to B: <strong>{totalDistanceAB} km</strong></span>
+            {midpoint ? (
+              <span>
+                Midpoint: <strong>{midpoint.lat.toFixed(4)}, {midpoint.lng.toFixed(4)}</strong>
+                {totalDistanceAB !== null && (
+                  <span className="text-zinc-400 font-normal"> (Distance A to B: {totalDistanceAB} km)</span>
+                )}
+              </span>
+            ) : (
+              <span>Distance A to B: <strong>{totalDistanceAB} km</strong></span>
+            )}
           </div>
           <span className="font-semibold text-zinc-900 dark:text-zinc-100">
             {branches.length} branches found

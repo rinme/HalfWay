@@ -3,6 +3,7 @@
 import React from "react";
 import { ExternalLink, Award, CheckCircle2 } from "lucide-react";
 import { ScoredBranch } from "@/lib/geo";
+import { PERSON_COLORS } from "@/hooks/useSearchState";
 
 interface ResultCardProps {
   branch: ScoredBranch;
@@ -13,6 +14,7 @@ interface ResultCardProps {
 
 export function ResultCard({ branch, rank, isHighlighted, onHover }: ResultCardProps) {
   const isTopMatch = rank === 1;
+  const spread = branch.spread ?? branch.fairnessDelta ?? 0;
 
   return (
     <div
@@ -47,7 +49,7 @@ export function ResultCard({ branch, rank, isHighlighted, onHover }: ResultCardP
 
         <span
           className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${
-            branch.fairnessDelta <= 0.5
+            spread <= 0.5
               ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
               : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
           }`}
@@ -57,26 +59,66 @@ export function ResultCard({ branch, rank, isHighlighted, onHover }: ResultCardP
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 text-center">
-        <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-1.5">
-          <div className="text-[10px] text-zinc-400 font-medium">To Person A</div>
-          <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-            {branch.distA} km
+      {branch.distances && branch.distances.length > 0 ? (
+        <div
+          className={`grid gap-2 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 text-center ${
+            branch.distances.length <= 2
+              ? "grid-cols-3"
+              : branch.distances.length <= 3
+              ? "grid-cols-2 sm:grid-cols-4"
+              : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4"
+          }`}
+        >
+          {branch.distances.map((d, idx) => {
+            const color = PERSON_COLORS[idx % PERSON_COLORS.length];
+            return (
+              <div
+                key={d.personId || idx}
+                className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-1.5 flex flex-col items-center justify-center min-w-0"
+                title={`${d.name}: ${d.distance} km`}
+              >
+                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium truncate w-full flex items-center justify-center gap-1">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="truncate">{d.name}</span>
+                </div>
+                <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mt-0.5">
+                  {d.distance} km
+                </div>
+              </div>
+            );
+          })}
+          <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-1.5 flex flex-col items-center justify-center min-w-0">
+            <div className="text-[10px] text-zinc-400 font-medium">Spread</div>
+            <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mt-0.5">
+              ±{spread} km
+            </div>
           </div>
         </div>
-        <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-1.5">
-          <div className="text-[10px] text-zinc-400 font-medium">To Person B</div>
-          <div className="text-xs font-bold text-violet-600 dark:text-violet-400">
-            {branch.distB} km
+      ) : (
+        <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 text-center">
+          <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-1.5">
+            <div className="text-[10px] text-zinc-400 font-medium">To Person A</div>
+            <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              {branch.distA ?? 0} km
+            </div>
+          </div>
+          <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-1.5">
+            <div className="text-[10px] text-zinc-400 font-medium">To Person B</div>
+            <div className="text-xs font-bold text-violet-600 dark:text-violet-400">
+              {branch.distB ?? 0} km
+            </div>
+          </div>
+          <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-1.5">
+            <div className="text-[10px] text-zinc-400 font-medium">Difference</div>
+            <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+              ±{spread} km
+            </div>
           </div>
         </div>
-        <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-1.5">
-          <div className="text-[10px] text-zinc-400 font-medium">Difference</div>
-          <div className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-            ±{branch.fairnessDelta} km
-          </div>
-        </div>
-      </div>
+      )}
 
       <div className="mt-3 flex items-center justify-between">
         <span className="text-[10px] text-zinc-400">
