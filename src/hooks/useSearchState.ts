@@ -153,19 +153,27 @@ export function useSearchState() {
     const q = params.get("q");
 
     if (aLat && aLng) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPointA({
-        lat: parseFloat(aLat),
-        lng: parseFloat(aLng),
-        address: aName || `${aLat}, ${aLng}`,
-      });
+      const parsedLat = parseFloat(aLat);
+      const parsedLng = parseFloat(aLng);
+      if (!Number.isNaN(parsedLat) && !Number.isNaN(parsedLng)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPointA({
+          lat: parsedLat,
+          lng: parsedLng,
+          address: aName || `${aLat}, ${aLng}`,
+        });
+      }
     }
     if (bLat && bLng) {
-      setPointB({
-        lat: parseFloat(bLat),
-        lng: parseFloat(bLng),
-        address: bName || `${bLat}, ${bLng}`,
-      });
+      const parsedLat = parseFloat(bLat);
+      const parsedLng = parseFloat(bLng);
+      if (!Number.isNaN(parsedLat) && !Number.isNaN(parsedLng)) {
+        setPointB({
+          lat: parsedLat,
+          lng: parsedLng,
+          address: bName || `${bLat}, ${bLng}`,
+        });
+      }
     }
     if (q) {
       setQuery(q);

@@ -994,6 +994,106 @@ describe("Task 8: GoogleMap Component", () => {
     );
     expect(branch1Marker).toBeDefined();
 
+    // Verify InfoWindow tracking: branch1 was open
+    expect(createdInfoWindows.filter((iw) => iw.isOpen).length).toBe(1);
+
+    // Clicking marker A should close previous InfoWindow and open infoA
+    markerA.listeners["click"]?.();
+    const infoA = createdInfoWindows.find((iw) => iw.content.includes("Point A"));
+    expect(infoA?.isOpen).toBe(true);
+    expect(createdInfoWindows.filter((iw) => iw.isOpen).length).toBe(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+
+    // Verify overlay cleanup on unmount
+    expect(createdMarkers.every((m) => m.map === null)).toBe(true);
+    expect(createdCircles.every((c) => c.map === null)).toBe(true);
+    expect(createdPolylines.every((p) => p.map === null)).toBe(true);
+  });
+
+  it("clamps zoom to 15 on idle when single point is present in bounds", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    let idleHandler: Function | null = null;
+    let currentZoom = 21;
+    let fitBoundsCalled = false;
+
+    const singlePointMockGoogle = {
+      maps: {
+        Map: class {
+          center: any;
+          zoom: number;
+          constructor(_c: any, opts: any) {
+            this.center = opts?.center;
+            this.zoom = opts?.zoom;
+          }
+          addListener() {}
+          fitBounds() {
+            fitBoundsCalled = true;
+          }
+          getZoom() {
+            return currentZoom;
+          }
+          setZoom(z: number) {
+            currentZoom = z;
+          }
+        },
+        Marker: class {
+          setMap() {}
+          addListener() {}
+        },
+        Polyline: class {
+          setMap() {}
+        },
+        Circle: class {
+          setMap() {}
+        },
+        InfoWindow: class {
+          open() {}
+          close() {}
+        },
+        LatLngBounds: class {
+          extend() {}
+        },
+        Point: class {
+          constructor(public x: number, public y: number) {}
+        },
+        event: {
+          addListenerOnce: (_instance: any, eventName: string, handler: Function) => {
+            if (eventName === "idle") idleHandler = handler;
+          },
+        },
+      },
+    };
+
+    (window as any).google = singlePointMockGoogle;
+
+    await act(async () => {
+      root.render(
+        <GoogleMap
+          apiKey="AIzaValidKey"
+          pointA={mockPointA}
+          pointB={null}
+          midpoint={null}
+          branches={[]}
+          activePinMode={null}
+          highlightedBranchId={null}
+          onMapClick={() => {}}
+          onMarkerDrag={() => {}}
+          onFallbackToOsm={() => {}}
+        />
+      );
+    });
+
+    expect(fitBoundsCalled).toBe(true);
+    expect(idleHandler).not.toBeNull();
+    idleHandler!();
+    expect(currentZoom).toBe(15);
+
     await act(async () => {
       root.unmount();
     });

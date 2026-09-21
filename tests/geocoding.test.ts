@@ -81,9 +81,25 @@ describe("Geocoding Service", () => {
   });
 
   it("handles valid response parsing gracefully", async () => {
-    // Call with query that triggers mock or valid format
+    const mockOsmResults = [
+      {
+        display_name: "Siam Paragon, Bangkok",
+        lat: "13.7462",
+        lon: "100.5347",
+      },
+    ];
+
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify(mockOsmResults), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
     const results = await geocodeAddress("Siam Paragon, Bangkok", "osm");
     expect(Array.isArray(results)).toBe(true);
+    expect(results.length).toBe(1);
+    expect(results[0].label).toBe("Siam Paragon, Bangkok");
   });
 
   it("parses Nominatim geocoding results correctly", async () => {
@@ -258,5 +274,32 @@ describe("Geocoding Service", () => {
     expect(networkCalls).toBe(1);
     expect(addr1).toBe("Cached Address");
     expect(addr2).toBe("Cached Address");
+  });
+
+  it("reverseGeocode isolates cache entries between apiKey and nokey", async () => {
+    let networkCalls = 0;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      networkCalls++;
+      if (url.toString().includes("maps.googleapis.com")) {
+        return new Response(
+          JSON.stringify({
+            status: "OK",
+            results: [{ formatted_address: "Google Address" }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(
+        JSON.stringify({ display_name: "OSM Address" }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }) as unknown as typeof fetch;
+
+    const resNoKey = await reverseGeocode(13.5555, 100.5555, "google");
+    const resWithKey = await reverseGeocode(13.5555, 100.5555, "google", "MY_KEY");
+
+    expect(networkCalls).toBe(2);
+    expect(resNoKey).toBe("OSM Address");
+    expect(resWithKey).toBe("Google Address");
   });
 });

@@ -33,6 +33,8 @@ export function LocationInput({
   useEffect(() => {
     if (point?.address) {
       setQuery(point.address);
+    } else if (!point) {
+      setQuery("");
     }
   }, [point]);
 

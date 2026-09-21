@@ -73,7 +73,7 @@ export async function reverseGeocode(
   provider: "osm" | "google" = "osm",
   apiKey?: string
 ): Promise<string> {
-  const cacheKey = `${provider}:${lat.toFixed(4)},${lng.toFixed(4)}`;
+  const cacheKey = `${provider}:${apiKey ? "key:" : "nokey:"}${lat.toFixed(4)},${lng.toFixed(4)}`;
   const cached = reverseCache.get(cacheKey);
   if (cached) return cached;
 

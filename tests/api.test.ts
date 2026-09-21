@@ -72,6 +72,20 @@ describe("Elysia API Route Handlers", () => {
     expect(data.address).toBe("Pathum Wan, Bangkok");
   });
 
+  it("returns 400 when GET /api/reverse-geocode receives NaN coordinates", async () => {
+    const resLatNaN = await app.handle(new Request("http://localhost/api/reverse-geocode?lat=invalid&lng=100.5392"));
+    expect(resLatNaN.status).toBe(400);
+    const dataLatNaN = await resLatNaN.json();
+    expect(dataLatNaN.success).toBe(false);
+    expect(dataLatNaN.error).toBe("Invalid coordinates");
+
+    const resLngNaN = await app.handle(new Request("http://localhost/api/reverse-geocode?lat=13.7466&lng=invalid"));
+    expect(resLngNaN.status).toBe(400);
+    const dataLngNaN = await resLngNaN.json();
+    expect(dataLngNaN.success).toBe(false);
+    expect(dataLngNaN.error).toBe("Invalid coordinates");
+  });
+
   it("validates POST /api/search-midpoint payload", async () => {
     const res = await app.handle(
       new Request("http://localhost/api/search-midpoint", {

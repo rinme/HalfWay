@@ -23,9 +23,13 @@ export const app = new Elysia({ prefix: "/api" })
   )
   .get(
     "/reverse-geocode",
-    async ({ query }) => {
+    async ({ query, set }) => {
       const lat = parseFloat(query.lat || "0");
       const lng = parseFloat(query.lng || "0");
+      if (Number.isNaN(lat) || Number.isNaN(lng)) {
+        set.status = 400;
+        return { success: false, error: "Invalid coordinates" };
+      }
       const provider = query.provider === "google" ? "google" : "osm";
       const key = query.key;
       const address = await reverseGeocode(lat, lng, provider, key);

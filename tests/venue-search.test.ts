@@ -308,9 +308,10 @@ describe("Venue Search Service", () => {
         return new Response(JSON.stringify({ elements: [] }), { status: 200 });
       }) as any;
 
-      await fetchOverpassVenues(midpoint, "Starbucks (Central) [World] + Cafe?");
+      await fetchOverpassVenues(midpoint, 'Starbucks "Special" (Central) [World] + Cafe?');
 
       const decodedBody = decodeURIComponent(capturedBody);
+      expect(decodedBody).toContain('\\"Special\\"');
       expect(decodedBody).toContain("\\[World\\]");
       expect(decodedBody).toContain("\\(Central\\)");
       expect(decodedBody).toContain("\\+");

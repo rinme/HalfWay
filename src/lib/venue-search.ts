@@ -14,11 +14,13 @@ export async function fetchGooglePlaces(
   apiKey: string,
   radiusMeters: number = 10000
 ): Promise<BranchCandidate[]> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
   try {
     const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${midpoint.lat},${midpoint.lng}&radius=${radiusMeters}&keyword=${encodeURIComponent(
       query
     )}&key=${apiKey}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: controller.signal });
     const data = (await res.json()) as any;
     if (data.status === "OK" && Array.isArray(data.results)) {
       return data.results.slice(0, 30).map((place: any) => ({
@@ -32,6 +34,8 @@ export async function fetchGooglePlaces(
     return [];
   } catch {
     return [];
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

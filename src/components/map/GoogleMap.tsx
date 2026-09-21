@@ -33,6 +33,7 @@ export function GoogleMap({
   const [isLoaded, setIsLoaded] = useState(false);
   const mapInstanceRef = useRef<any>(null);
   const overlaysRef = useRef<any[]>([]);
+  const activeInfoWindowRef = useRef<any>(null);
 
   const onMapClickRef = useRef(onMapClick);
   onMapClickRef.current = onMapClick;
@@ -130,12 +131,24 @@ export function GoogleMap({
     const google = (window as any).google;
     if (!map || !google?.maps) return;
 
-    // Clear previous overlays
+    // Clear previous InfoWindow and overlays
+    if (activeInfoWindowRef.current) {
+      activeInfoWindowRef.current.close();
+      activeInfoWindowRef.current = null;
+    }
     overlaysRef.current.forEach((overlay) => overlay.setMap(null));
     overlaysRef.current = [];
 
+    const openInfoWindow = (infoWindow: any, marker: any) => {
+      if (activeInfoWindowRef.current) {
+        activeInfoWindowRef.current.close();
+      }
+      infoWindow.open(map, marker);
+      activeInfoWindowRef.current = infoWindow;
+    };
+
     const bounds = new google.maps.LatLngBounds();
-    let hasBounds = false;
+    let pointCount = 0;
 
     // Helper to create pin SVG icon
     const createPinSymbol = (color: string) => ({
@@ -153,7 +166,7 @@ export function GoogleMap({
     if (pointA) {
       const pos = { lat: pointA.lat, lng: pointA.lng };
       bounds.extend(pos);
-      hasBounds = true;
+      pointCount++;
 
       const markerA = new google.maps.Marker({
         position: pos,
@@ -168,7 +181,7 @@ export function GoogleMap({
       const infoA = new google.maps.InfoWindow({
         content: `<strong>Point A</strong><br/>${pointA.address}`,
       });
-      markerA.addListener("click", () => infoA.open(map, markerA));
+      markerA.addListener("click", () => openInfoWindow(infoA, markerA));
 
       markerA.addListener("dragend", (e: any) => {
         if (e.latLng) {
@@ -181,7 +194,7 @@ export function GoogleMap({
     if (pointB) {
       const pos = { lat: pointB.lat, lng: pointB.lng };
       bounds.extend(pos);
-      hasBounds = true;
+      pointCount++;
 
       const markerB = new google.maps.Marker({
         position: pos,
@@ -196,7 +209,7 @@ export function GoogleMap({
       const infoB = new google.maps.InfoWindow({
         content: `<strong>Point B</strong><br/>${pointB.address}`,
       });
-      markerB.addListener("click", () => infoB.open(map, markerB));
+      markerB.addListener("click", () => openInfoWindow(infoB, markerB));
 
       markerB.addListener("dragend", (e: any) => {
         if (e.latLng) {
@@ -224,7 +237,7 @@ export function GoogleMap({
     if (midpoint) {
       const pos = { lat: midpoint.lat, lng: midpoint.lng };
       bounds.extend(pos);
-      hasBounds = true;
+      pointCount++;
 
       const midMarker = new google.maps.Marker({
         position: pos,
@@ -238,7 +251,7 @@ export function GoogleMap({
       const midInfo = new google.maps.InfoWindow({
         content: "<strong>Fair Midpoint</strong>",
       });
-      midMarker.addListener("click", () => midInfo.open(map, midMarker));
+      midMarker.addListener("click", () => openInfoWindow(midInfo, midMarker));
 
       // 3km inner circle
       const innerCircle = new google.maps.Circle({
@@ -271,7 +284,7 @@ export function GoogleMap({
     branches.forEach((b, idx) => {
       const pos = { lat: b.lat, lng: b.lng };
       bounds.extend(pos);
-      hasBounds = true;
+      pointCount++;
 
       const isHighlighted = highlightedBranchId === b.id;
       const markerColor = isHighlighted ? "#4f46e5" : idx === 0 ? "#f59e0b" : "#475569";
@@ -293,16 +306,43 @@ export function GoogleMap({
           `<a href="${b.googleMapsUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline;">Open Directions</a>`,
       });
 
-      marker.addListener("click", () => infoWindow.open(map, marker));
+      marker.addListener("click", () => openInfoWindow(infoWindow, marker));
 
       if (isHighlighted) {
-        infoWindow.open(map, marker);
+        openInfoWindow(infoWindow, marker);
       }
     });
 
-    if (hasBounds) {
+    if (pointCount === 1) {
+      map.fitBounds(bounds);
+      if (google?.maps?.event?.addListenerOnce) {
+        google.maps.event.addListenerOnce(map, "idle", () => {
+          if (typeof map.getZoom === "function" && map.getZoom() > 15) {
+            map.setZoom(15);
+          }
+        });
+      } else if (typeof map.addListener === "function") {
+        const listener = map.addListener("idle", () => {
+          if (typeof map.getZoom === "function" && map.getZoom() > 15) {
+            map.setZoom(15);
+          }
+          if (listener && typeof listener.remove === "function") {
+            listener.remove();
+          }
+        });
+      }
+    } else if (pointCount > 1) {
       map.fitBounds(bounds);
     }
+
+    return () => {
+      if (activeInfoWindowRef.current) {
+        activeInfoWindowRef.current.close();
+        activeInfoWindowRef.current = null;
+      }
+      overlaysRef.current.forEach((overlay) => overlay.setMap(null));
+      overlaysRef.current = [];
+    };
   }, [isLoaded, pointA, pointB, midpoint, branches, highlightedBranchId]);
 
   return (

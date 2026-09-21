@@ -7,7 +7,7 @@ export const OVERPASS_MIRRORS = [
 ];
 
 function escapeRegex(text: string): string {
-  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s"]/g, "\\$&");
 }
 
 export async function fetchOverpassVenues(
@@ -26,10 +26,9 @@ export async function fetchOverpassVenues(
 out center tags 30;`;
 
   for (const mirror of OVERPASS_MIRRORS) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
       const response = await fetch(mirror, {
         method: "POST",
         headers: {
@@ -39,8 +38,6 @@ out center tags 30;`;
         body: `data=${encodeURIComponent(overpassQuery)}`,
         signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
 
       if (!response.ok) continue;
 
@@ -73,6 +70,8 @@ out center tags 30;`;
     } catch {
       // Mirror failed or timed out, loop to next mirror
       continue;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

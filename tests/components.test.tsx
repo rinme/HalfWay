@@ -537,6 +537,59 @@ describe("Task 7: Split Layout & UI Components", () => {
       });
     });
 
+    it("resets query to empty string when point is updated to null", async () => {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+
+      const point: LocationPoint = {
+        lat: 13.75,
+        lng: 100.5,
+        address: "Siam Discovery, Bangkok",
+      };
+
+      await act(async () => {
+        root.render(
+          React.createElement(LocationInput, {
+            label: "Person A's Location",
+            point,
+            onChange: () => {},
+            colorClass: "bg-emerald-500",
+            badgeLabel: "A",
+            isActivePinMode: false,
+            onTogglePinMode: () => {},
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      let input = findElement(container, (n) => n.tagName === "INPUT");
+      expect(getReactProps(input!)?.value).toBe("Siam Discovery, Bangkok");
+
+      // Rerender with point = null
+      await act(async () => {
+        root.render(
+          React.createElement(LocationInput, {
+            label: "Person A's Location",
+            point: null,
+            onChange: () => {},
+            colorClass: "bg-emerald-500",
+            badgeLabel: "A",
+            isActivePinMode: false,
+            onTogglePinMode: () => {},
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      input = findElement(container, (n) => n.tagName === "INPUT");
+      expect(getReactProps(input!)?.value).toBe("");
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
     it("triggers debounced geocode search after typing and selects a suggestion", async () => {
       const { doc } = setupDOM();
       const container = createMockElement("div", doc);

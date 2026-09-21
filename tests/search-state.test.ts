@@ -496,6 +496,17 @@ describe("Task 6: useSearchState Hook", () => {
     await unmount();
   });
 
+  it("ignores NaN coordinates when hydrating from URL params", async () => {
+    setupDOM("?a_lat=invalid&a_lng=100.5&b_lat=13.72&b_lng=notanumber");
+
+    const { result, unmount } = await renderHook(() => useSearchState());
+
+    expect(result.current.state.pointA).toBeNull();
+    expect(result.current.state.pointB).toBeNull();
+
+    await unmount();
+  });
+
   it("executeSearch sets error if pointA, pointB, or query is missing", async () => {
     const { result, act: actHook, unmount } = await renderHook(() => useSearchState());
 
