@@ -64,7 +64,8 @@ export function Header({ settings, onOpenSettings, onOpenShare }: HeaderProps) {
               isGoogle ? "bg-indigo-500 animate-pulse" : "bg-emerald-500"
             }`}
           />
-          <span>{isGoogle ? "Google Maps" : "OpenStreetMap"}</span>
+          <span className="hidden sm:inline">{isGoogle ? "Google Maps" : "OpenStreetMap"}</span>
+          <span className="sm:hidden">{isGoogle ? "Google" : "OSM"}</span>
         </div>
 
         <button

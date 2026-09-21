@@ -9,6 +9,11 @@ import { SearchForm } from "../src/components/SearchForm";
 import { ResultCard } from "../src/components/ResultCard";
 import { ResultsList } from "../src/components/ResultsList";
 
+import { render, screen } from "@testing-library/react";
+
+const happyDoc = globalThis.document;
+const happyWin = globalThis.window;
+
 // --- Mock DOM Environment for React Client Component Tests in Bun ---
 
 interface MockElement {
@@ -396,6 +401,10 @@ describe("Task 7: Split Layout & UI Components", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    if ((globalThis as any).__happyDoc) {
+      (globalThis as any).document = (globalThis as any).__happyDoc;
+      (globalThis as any).window = (globalThis as any).__happyWin;
+    }
   });
 
   // ==========================================
@@ -559,6 +568,15 @@ describe("Task 7: Split Layout & UI Components", () => {
       await act(async () => {
         root.unmount();
       });
+    });
+
+    it("Header renders cleanly with responsive badge and share button", () => {
+      (globalThis as any).document = (globalThis as any).__happyDoc;
+      (globalThis as any).window = (globalThis as any).__happyWin;
+      const mockSettings = { activeProvider: "osm" as const, googleMapsApiKey: "" };
+      render(<Header settings={mockSettings} onOpenSettings={() => {}} />);
+      expect(screen.getByText("HalfWay")).toBeDefined();
+      expect(screen.getByText("OSM")).toBeDefined();
     });
   });
 

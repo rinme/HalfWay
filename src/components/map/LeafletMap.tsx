@@ -11,13 +11,14 @@ export interface LeafletMapProps {
   midpoint: LatLng | null;
   branches: ScoredBranch[];
   activePinMode?: "A" | "B" | null;
-  highlightedBranchId: string | null;
-  onMapClick: (coord: LatLng) => void;
+  highlightedBranchId?: string | null;
+  onMapClick?: (coord: LatLng) => void;
   onMarkerDrag?: (point: "A" | "B", coord: LatLng) => void;
   // Multi-person props
   persons?: Person[];
   activePinPersonId?: string | null;
   onPersonMarkerDrag?: (personId: string, coord: LatLng) => void;
+  onSelectBranch?: (branch: ScoredBranch) => void;
 }
 
 const DEFAULT_COLORS = [
@@ -68,10 +69,14 @@ export function LeafletMap({
   persons,
   activePinPersonId,
   onPersonMarkerDrag,
+  onSelectBranch,
 }: LeafletMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
+
+  const onSelectBranchRef = useRef(onSelectBranch);
+  onSelectBranchRef.current = onSelectBranch;
 
   const onMapClickRef = useRef(onMapClick);
   onMapClickRef.current = onMapClick;
@@ -116,7 +121,7 @@ export function LeafletMap({
     mapInstanceRef.current = map;
 
     map.on("click", (e: L.LeafletMouseEvent) => {
-      onMapClickRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
+      onMapClickRef.current?.({ lat: e.latlng.lat, lng: e.latlng.lng });
     });
 
     return () => {
@@ -286,6 +291,10 @@ export function LeafletMap({
       if (isHighlighted) {
         marker.openPopup();
       }
+
+      marker.on("click", () => {
+        onSelectBranchRef.current?.(b);
+      });
     });
 
     if (bounds.length > 0) {
@@ -299,6 +308,17 @@ export function LeafletMap({
       className={`w-full h-full relative z-0 ${
         activePinMode || activePinPersonId ? "cursor-crosshair" : ""
       }`}
-    />
+    >
+      <div className="sr-only" data-testid="map-markers-layer">
+        {branches.map((b) => (
+          <button
+            key={b.id}
+            data-testid={`branch-marker-${b.id}`}
+            onClick={() => onSelectBranchRef.current?.(b)}
+            aria-label={b.name}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

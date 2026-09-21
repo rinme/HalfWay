@@ -31,7 +31,7 @@ const GoogleMap = dynamic(
 
 export interface MapViewProps {
   provider: MapProvider;
-  googleMapsApiKey: string;
+  googleMapsApiKey?: string;
   // Multi-person props
   persons?: Person[];
   activePinPersonId?: string | null;
@@ -44,9 +44,10 @@ export interface MapViewProps {
   // Shared props
   midpoint: LatLng | null;
   branches: ScoredBranch[];
-  highlightedBranchId: string | null;
-  onMapClick: (coord: LatLng) => void;
-  onFallbackToOsm: () => void;
+  highlightedBranchId?: string | null;
+  onMapClick?: (coord: LatLng) => void;
+  onFallbackToOsm?: () => void;
+  onSelectBranch?: (branch: ScoredBranch) => void;
 }
 
 export function MapView(props: MapViewProps) {
@@ -62,10 +63,11 @@ export function MapView(props: MapViewProps) {
         midpoint={props.midpoint}
         branches={props.branches}
         activePinMode={props.activePinMode ?? null}
-        highlightedBranchId={props.highlightedBranchId}
-        onMapClick={props.onMapClick}
+        highlightedBranchId={props.highlightedBranchId ?? null}
+        onMapClick={props.onMapClick ?? (() => {})}
         onMarkerDrag={props.onMarkerDrag ?? (() => {})}
-        onFallbackToOsm={props.onFallbackToOsm}
+        onFallbackToOsm={props.onFallbackToOsm ?? (() => {})}
+        onSelectBranch={props.onSelectBranch}
       />
     );
   }
@@ -80,9 +82,10 @@ export function MapView(props: MapViewProps) {
       midpoint={props.midpoint}
       branches={props.branches}
       activePinMode={props.activePinMode ?? null}
-      highlightedBranchId={props.highlightedBranchId}
-      onMapClick={props.onMapClick}
+      highlightedBranchId={props.highlightedBranchId ?? null}
+      onMapClick={props.onMapClick ?? (() => {})}
       onMarkerDrag={props.onMarkerDrag ?? (() => {})}
+      onSelectBranch={props.onSelectBranch}
     />
   );
 }

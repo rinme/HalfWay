@@ -16,10 +16,11 @@ export interface GoogleMapProps {
   midpoint: LatLng | null;
   branches: ScoredBranch[];
   activePinMode?: "A" | "B" | null;
-  highlightedBranchId: string | null;
-  onMapClick: (coord: LatLng) => void;
+  highlightedBranchId?: string | null;
+  onMapClick?: (coord: LatLng) => void;
   onMarkerDrag?: (point: "A" | "B", coord: LatLng) => void;
-  onFallbackToOsm: () => void;
+  onFallbackToOsm?: () => void;
+  onSelectBranch?: (branch: ScoredBranch) => void;
 }
 
 const DEFAULT_COLORS = [
@@ -72,12 +73,16 @@ export function GoogleMap({
   onMapClick,
   onMarkerDrag,
   onFallbackToOsm,
+  onSelectBranch,
 }: GoogleMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const mapInstanceRef = useRef<any>(null);
   const overlaysRef = useRef<any[]>([]);
   const activeInfoWindowRef = useRef<any>(null);
+
+  const onSelectBranchRef = useRef(onSelectBranch);
+  onSelectBranchRef.current = onSelectBranch;
 
   const onMapClickRef = useRef(onMapClick);
   onMapClickRef.current = onMapClick;
@@ -94,7 +99,7 @@ export function GoogleMap({
   // Load Google Maps script with error handling and fallback
   useEffect(() => {
     if (!apiKey) {
-      onFallbackToOsmRef.current();
+      onFallbackToOsmRef.current?.();
       return;
     }
 
@@ -115,7 +120,7 @@ export function GoogleMap({
       alert(
         "Google Maps authentication failed (invalid API key). Falling back to OpenStreetMap."
       );
-      onFallbackToOsmRef.current();
+      onFallbackToOsmRef.current?.();
     };
 
     if (!script) {
@@ -128,7 +133,7 @@ export function GoogleMap({
       script.onload = () => setIsLoaded(true);
       script.onerror = () => {
         alert("Failed to load Google Maps script. Switching back to OpenStreetMap.");
-        onFallbackToOsmRef.current();
+        onFallbackToOsmRef.current?.();
       };
       document.head.appendChild(script);
     } else {
@@ -167,7 +172,7 @@ export function GoogleMap({
 
     map.addListener("click", (e: any) => {
       if (e.latLng) {
-        onMapClickRef.current({
+        onMapClickRef.current?.({
           lat: typeof e.latLng.lat === "function" ? e.latLng.lat() : e.latLng.lat,
           lng: typeof e.latLng.lng === "function" ? e.latLng.lng() : e.latLng.lng,
         });
@@ -437,7 +442,12 @@ export function GoogleMap({
           `<a href="${encodeURI(b.googleMapsUrl)}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline;">Open Directions</a>`,
       });
 
-      marker.addListener("click", () => openInfoWindow(infoWindow, marker));
+      marker.addListener("click", () => {
+        if (onSelectBranchRef.current) {
+          onSelectBranchRef.current(b);
+        }
+        openInfoWindow(infoWindow, marker);
+      });
 
       if (isHighlighted) {
         openInfoWindow(infoWindow, marker);
@@ -482,6 +492,17 @@ export function GoogleMap({
       className={`w-full h-full relative z-0 ${
         activePinMode || activePinPersonId ? "cursor-crosshair" : ""
       }`}
-    />
+    >
+      <div className="sr-only" data-testid="google-map-markers-layer">
+        {branches.map((b) => (
+          <button
+            key={b.id}
+            data-testid={`google-branch-marker-${b.id}`}
+            onClick={() => onSelectBranchRef.current?.(b)}
+            aria-label={b.name}
+          />
+        ))}
+      </div>
+    </div>
   );
 }

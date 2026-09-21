@@ -1,8 +1,12 @@
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { LocationPoint, Person } from "../src/types";
 import { ScoredBranch, LatLng } from "../src/lib/geo";
+
+const happyDoc = globalThis.document;
+const happyWin = globalThis.window;
 
 // --- Mock DOM Environment ---
 interface MockElement {
@@ -332,6 +336,9 @@ const mockLeaflet = {
             leafletSpies.markerDragHandlers[opts.personId] = cb;
           }
         }
+        if (event === "click") {
+          markerObj.clickHandler = cb;
+        }
       }),
     };
     leafletSpies.markers.push(markerObj);
@@ -365,10 +372,39 @@ mock.module("leaflet", () => ({
   ...mockLeaflet,
 }));
 
+mock.module("next/dynamic", () => ({
+  default: () => {
+    return function DynamicMock(props: any) {
+      if (props.apiKey) return <GoogleMap {...props} />;
+      return <LeafletMap {...props} />;
+    };
+  },
+}));
+
 // Import components dynamically after mock.module and setupDOM
 const { LeafletMap } = await import("../src/components/map/LeafletMap");
 const { GoogleMap } = await import("../src/components/map/GoogleMap");
 const { MapView } = await import("../src/components/map/MapView");
+
+const mockBranch1: ScoredBranch = {
+  id: "1",
+  name: "Starbucks Siam Paragon",
+  address: "991 Rama I Rd, Bangkok",
+  lat: 13.7462,
+  lng: 100.5345,
+  distances: [
+    { personId: "p1", name: "Person A", distance: 0.1 },
+    { personId: "p2", name: "Person B", distance: 0.5 },
+  ],
+  distA: 0.1,
+  distB: 0.5,
+  distMid: 0.25,
+  fairnessScore: 1.4,
+  spread: 0.4,
+  fairnessDelta: 0.4,
+  tier: "primary",
+  googleMapsUrl: "https://maps.google.com/?q=13.7462,100.5345",
+};
 
 const mockPointA: LocationPoint = {
   address: "Siam Paragon, Rama I Rd, Pathum Wan, Bangkok",
@@ -1460,6 +1496,13 @@ describe("Task 8: MapView Component", () => {
     resetLeafletSpies();
   });
 
+  afterEach(() => {
+    if ((globalThis as any).__happyDoc) {
+      (globalThis as any).document = (globalThis as any).__happyDoc;
+      (globalThis as any).window = (globalThis as any).__happyWin;
+    }
+  });
+
   it("renders LeafletMap when provider is osm", async () => {
     const { doc } = setupDOM();
     const container = createMockElement("div", doc);
@@ -1661,5 +1704,137 @@ describe("Task 8: MapView Component", () => {
       root.unmount();
     });
   });
+
+  it("MapView propagates onSelectBranch to map markers", () => {
+    (globalThis as any).document = (globalThis as any).__happyDoc;
+    (globalThis as any).window = (globalThis as any).__happyWin;
+    const handleSelect = mock();
+    render(
+      <MapView
+        provider="osm"
+        midpoint={{ lat: 13.75, lng: 100.5 }}
+        branches={[mockBranch1]}
+        onSelectBranch={handleSelect}
+      />
+    );
+    // Leaflet renders branch marker; clicking it triggers handleSelect
+    const branchMarker = screen.getByTestId("branch-marker-1");
+    fireEvent.click(branchMarker);
+    expect(handleSelect).toHaveBeenCalledWith(mockBranch1);
+  });
+
+  it("LeafletMap calls onSelectBranch when branch marker is clicked", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    const onSelectBranch = mock((_b: ScoredBranch) => {});
+
+    await act(async () => {
+      root.render(
+        <LeafletMap
+          pointA={mockPointA}
+          pointB={mockPointB}
+          midpoint={mockMidpoint}
+          branches={mockBranches}
+          activePinMode={null}
+          highlightedBranchId={null}
+          onMapClick={() => {}}
+          onMarkerDrag={() => {}}
+          onSelectBranch={onSelectBranch}
+        />
+      );
+    });
+
+    const branch1Marker = leafletSpies.markers.find((m) =>
+      m.opts?.icon?.html?.includes(">1<")
+    );
+    expect(branch1Marker).toBeDefined();
+    expect(branch1Marker.clickHandler).toBeDefined();
+    branch1Marker.clickHandler();
+    expect(onSelectBranch).toHaveBeenCalledWith(mockBranches[0]);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("GoogleMap calls onSelectBranch when branch marker is clicked", async () => {
+    const { doc } = setupDOM();
+    const container = createMockElement("div", doc);
+    const root = createRoot(container as unknown as Element);
+
+    const createdMarkers: any[] = [];
+    const markerClickListeners: Record<string, Function> = {};
+    const mockGoogle = {
+      maps: {
+        Map: class {
+          addListener() {}
+          fitBounds() {}
+        },
+        Marker: class {
+          opts: any;
+          listeners: Record<string, Function> = {};
+          constructor(opts: any) {
+            this.opts = opts;
+            createdMarkers.push(this);
+          }
+          addListener(evt: string, cb: Function) {
+            this.listeners[evt] = cb;
+            if (evt === "click" && this.opts?.label?.text === "1") {
+              markerClickListeners["branch-1"] = cb;
+            }
+          }
+          setMap() {}
+        },
+        Polyline: class {
+          setMap() {}
+        },
+        Circle: class {
+          setMap() {}
+        },
+        InfoWindow: class {
+          open() {}
+          close() {}
+        },
+        LatLngBounds: class {
+          extend() {}
+        },
+        Point: class {
+          constructor(public x: number, public y: number) {}
+        },
+      },
+    };
+    (window as any).google = mockGoogle;
+
+    const onSelectBranch = mock((_b: ScoredBranch) => {});
+
+    await act(async () => {
+      root.render(
+        <GoogleMap
+          apiKey="AIzaValidKey"
+          pointA={mockPointA}
+          pointB={mockPointB}
+          midpoint={mockMidpoint}
+          branches={mockBranches}
+          activePinMode={null}
+          highlightedBranchId={null}
+          onMapClick={() => {}}
+          onMarkerDrag={() => {}}
+          onFallbackToOsm={() => {}}
+          onSelectBranch={onSelectBranch}
+        />
+      );
+    });
+
+    expect(markerClickListeners["branch-1"]).toBeDefined();
+    markerClickListeners["branch-1"]();
+    expect(onSelectBranch).toHaveBeenCalledWith(mockBranches[0]);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });
+
 
