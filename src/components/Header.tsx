@@ -7,12 +7,17 @@ import { AppSettings } from "@/types";
 interface HeaderProps {
   settings: AppSettings;
   onOpenSettings: () => void;
+  onOpenShare?: () => void;
 }
 
-export function Header({ settings, onOpenSettings }: HeaderProps) {
+export function Header({ settings, onOpenSettings, onOpenShare }: HeaderProps) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = () => {
+    if (onOpenShare) {
+      onOpenShare();
+      return;
+    }
     if (typeof window !== "undefined") {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(window.location.href).catch(() => {});

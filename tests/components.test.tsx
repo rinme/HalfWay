@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { AppSettings, LocationPoint } from "../src/types";
+import { AppSettings, LocationPoint, Person } from "../src/types";
 import { ScoredBranch, LatLng } from "../src/lib/geo";
 import { Header } from "../src/components/Header";
 import { LocationInput } from "../src/components/LocationInput";
@@ -30,6 +30,8 @@ interface MockElement {
   setAttribute: (k: string, v: unknown) => void;
   removeAttribute: (k: string) => void;
   getAttribute: (k: string) => unknown;
+  focus?: () => void;
+  blur?: () => void;
   [key: string]: unknown;
 }
 
@@ -193,6 +195,8 @@ function createMockElement(tag: string, doc: MockDoc): MockElement {
     getAttribute: (k: string) => {
       return el[k];
     },
+    focus: () => {},
+    blur: () => {},
   };
   return el;
 }
@@ -301,6 +305,7 @@ interface ReactProps {
   onClick?: () => void;
   onChange?: (e: { target: { value: string } }) => void;
   onFocus?: () => void;
+  onBlur?: (e?: unknown) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   disabled?: boolean;
@@ -487,6 +492,41 @@ describe("Task 7: Split Layout & UI Components", () => {
       });
 
       expect(lastCopiedText).toBe("http://localhost:3000/?lat_a=13.75&lng_a=100.5");
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
+    it("triggers onOpenShare callback when share button is clicked and onOpenShare is provided", async () => {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+      let shareCalled = false;
+
+      await act(async () => {
+        root.render(
+          React.createElement(Header, {
+            settings: { googleMapsApiKey: "", activeProvider: "osm" },
+            onOpenSettings: () => {},
+            onOpenShare: () => {
+              shareCalled = true;
+            },
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+      const shareButton = buttons.find((b) => getReactProps(b)?.title?.includes("shareable link"));
+      expect(shareButton).toBeDefined();
+
+      await act(async () => {
+        getReactProps(shareButton!)?.onClick?.();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(shareCalled).toBe(true);
 
       await act(async () => {
         root.unmount();
@@ -858,6 +898,94 @@ describe("Task 7: Split Layout & UI Components", () => {
         root.unmount();
       });
     });
+
+    it("supports participant mode with inline renaming, delete button, and person color", async () => {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+
+      const person: Person = {
+        id: "person-1",
+        name: "Alice",
+        address: "Siam Paragon",
+        lat: 13.746,
+        lng: 100.534,
+        color: "#10b981",
+      };
+
+      let renamedTo = "";
+      let deleted = false;
+
+      await act(async () => {
+        root.render(
+          React.createElement(LocationInput, {
+            person,
+            label: person.name,
+            badgeLabel: "1",
+            point: { address: person.address, lat: person.lat, lng: person.lng },
+            isActivePinMode: false,
+            onTogglePinMode: () => {},
+            onChange: () => {},
+            onRename: (newName: string) => {
+              renamedTo = newName;
+            },
+            onDelete: () => {
+              deleted = true;
+            },
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const text = collectTextContent(container);
+      expect(text).toContain("Alice");
+
+      // Check delete button
+      const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+      const deleteBtn = buttons.find(
+        (b) => b.getAttribute("title") === "Delete person" || b.getAttribute("aria-label") === "Delete person"
+      );
+      expect(deleteBtn).toBeDefined();
+
+      await act(async () => {
+        getReactProps(deleteBtn!)?.onClick?.();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(deleted).toBe(true);
+
+      // Trigger rename by clicking rename button
+      const renameBtn = buttons.find(
+        (b) => b.getAttribute("title") === "Rename person" || String(b.getAttribute("aria-label") || "").includes("Rename")
+      );
+      expect(renameBtn).toBeDefined();
+
+      await act(async () => {
+        getReactProps(renameBtn!)?.onClick?.();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      // Find rename input
+      const inputs = findAllElements(container, (n) => n.tagName === "INPUT");
+      const renameInput = inputs.find(
+        (i) => i.getAttribute("data-testid") === "rename-input" || (i as any).value === "Alice"
+      );
+      expect(renameInput).toBeDefined();
+
+      // Change input value and blur
+      await act(async () => {
+        getReactProps(renameInput!)?.onChange?.({ target: { value: "Alice Wonderland" } });
+      });
+      await act(async () => {
+        getReactProps(renameInput!)?.onBlur?.();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(renamedTo).toBe("Alice Wonderland");
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
   });
 
   // ==========================================
@@ -1087,6 +1215,175 @@ describe("Task 7: Split Layout & UI Components", () => {
       });
 
       expect(submitted).toBe(true);
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
+    it("renders participant list and triggers onAddPerson via + Add Person button", async () => {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+
+      const persons: Person[] = [
+        { id: "p1", name: "Person 1", address: "CentralWorld", lat: 13.746, lng: 100.539, color: "#10b981" },
+        { id: "p2", name: "Person 2", address: "MBK Center", lat: 13.744, lng: 100.530, color: "#8b5cf6" },
+      ];
+
+      let addClicked = false;
+
+      await act(async () => {
+        root.render(
+          React.createElement(SearchForm, {
+            persons,
+            query: "Starbucks",
+            isLoading: false,
+            onAddPerson: () => {
+              addClicked = true;
+            },
+            onRemovePerson: () => {},
+            onRenamePerson: () => {},
+            onUpdatePersonLocation: () => {},
+            onQueryChange: () => {},
+            onSubmit: () => {},
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const text = collectTextContent(container);
+      expect(text).toContain("Person 1");
+      expect(text).toContain("Person 2");
+      expect(text).toContain("+ Add Person (2/8)");
+      expect(text).toContain("Find Midpoint Branches");
+
+      const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+      const addBtn = buttons.find((b) => collectTextContent(b).includes("+ Add Person"));
+      expect(addBtn).toBeDefined();
+
+      await act(async () => {
+        getReactProps(addBtn!)?.onClick?.();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(addClicked).toBe(true);
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
+    it("renders delete button when participant count > 2 and triggers onRemovePerson", async () => {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+
+      const persons: Person[] = [
+        { id: "p1", name: "Person 1", address: "CentralWorld", lat: 13.746, lng: 100.539, color: "#10b981" },
+        { id: "p2", name: "Person 2", address: "MBK Center", lat: 13.744, lng: 100.530, color: "#8b5cf6" },
+        { id: "p3", name: "Person 3", address: "Siam Paragon", lat: 13.746, lng: 100.535, color: "#f59e0b" },
+      ];
+
+      let removedId = "";
+
+      await act(async () => {
+        root.render(
+          React.createElement(SearchForm, {
+            persons,
+            query: "Starbucks",
+            isLoading: false,
+            onAddPerson: () => {},
+            onRemovePerson: (id) => {
+              removedId = id;
+            },
+            onRenamePerson: () => {},
+            onUpdatePersonLocation: () => {},
+            onQueryChange: () => {},
+            onSubmit: () => {},
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+      const deleteButtons = buttons.filter(
+        (b) => b.getAttribute("title") === "Delete person" || b.getAttribute("aria-label") === "Delete person"
+      );
+      expect(deleteButtons.length).toBe(3);
+
+      await act(async () => {
+        getReactProps(deleteButtons[2])?.onClick?.();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(removedId).toBe("p3");
+
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
+    it("supports renaming a participant within SearchForm", async () => {
+      const { doc } = setupDOM();
+      const container = createMockElement("div", doc);
+      const root = createRoot(container as unknown as Element);
+
+      const persons: Person[] = [
+        { id: "p1", name: "Bob", address: "CentralWorld", lat: 13.746, lng: 100.539, color: "#10b981" },
+        { id: "p2", name: "Charlie", address: "MBK Center", lat: 13.744, lng: 100.530, color: "#8b5cf6" },
+      ];
+
+      let renamedId = "";
+      let renamedName = "";
+
+      await act(async () => {
+        root.render(
+          React.createElement(SearchForm, {
+            persons,
+            query: "Starbucks",
+            isLoading: false,
+            onAddPerson: () => {},
+            onRemovePerson: () => {},
+            onRenamePerson: (id, name) => {
+              renamedId = id;
+              renamedName = name;
+            },
+            onUpdatePersonLocation: () => {},
+            onQueryChange: () => {},
+            onSubmit: () => {},
+          })
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const buttons = findAllElements(container, (n) => n.tagName === "BUTTON");
+      const renameBtns = buttons.filter(
+        (b) => b.getAttribute("title") === "Rename person" || String(b.getAttribute("aria-label") || "").includes("Rename")
+      );
+      expect(renameBtns.length).toBeGreaterThanOrEqual(1);
+
+      await act(async () => {
+        getReactProps(renameBtns[0])?.onClick?.();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      const inputs = findAllElements(container, (n) => n.tagName === "INPUT");
+      const renameInput = inputs.find(
+        (i) => i.getAttribute("data-testid") === "rename-input" || (i as any).value === "Bob"
+      );
+      expect(renameInput).toBeDefined();
+
+      await act(async () => {
+        getReactProps(renameInput!)?.onChange?.({ target: { value: "Bobby" } });
+      });
+      await act(async () => {
+        getReactProps(renameInput!)?.onBlur?.();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(renamedId).toBe("p1");
+      expect(renamedName).toBe("Bobby");
 
       await act(async () => {
         root.unmount();

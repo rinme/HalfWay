@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { ArrowUpDown, Search, Store, Sparkles } from "lucide-react";
+import { ArrowUpDown, Search, Store, Sparkles, Plus } from "lucide-react";
 import { LocationInput } from "./LocationInput";
-import { LocationPoint } from "@/types";
+import { LocationPoint, Person } from "@/types";
 
 const POPULAR_BRANDS = [
   "Starbucks",
@@ -15,67 +15,128 @@ const POPULAR_BRANDS = [
   "MK Restaurants",
 ];
 
-interface SearchFormProps {
-  pointA: LocationPoint | null;
-  pointB: LocationPoint | null;
+export interface SearchFormProps {
+  // Legacy props
+  pointA?: LocationPoint | null;
+  pointB?: LocationPoint | null;
+  activePinMode?: "A" | "B" | null;
+  onPointAChange?: (point: LocationPoint | null) => void;
+  onPointBChange?: (point: LocationPoint | null) => void;
+  onTogglePinMode?: (mode: "A" | "B") => void;
+  onSwapPoints?: () => void;
+
+  // Multi-person props
+  persons?: Person[];
+  onAddPerson?: () => void;
+  onRemovePerson?: (id: string) => void;
+  onRenamePerson?: (id: string, name: string) => void;
+  onUpdatePersonLocation?: (id: string, loc: { address: string; lat: number; lng: number }) => void;
+  activePinPersonId?: string | null;
+  onTogglePinPersonId?: (id: string) => void;
+
+  // Common props
   query: string;
-  activePinMode: "A" | "B" | null;
   isLoading: boolean;
-  onPointAChange: (point: LocationPoint | null) => void;
-  onPointBChange: (point: LocationPoint | null) => void;
   onQueryChange: (query: string) => void;
-  onTogglePinMode: (mode: "A" | "B") => void;
-  onSwapPoints: () => void;
   onSubmit: () => void;
 }
 
 export function SearchForm({
   pointA,
   pointB,
-  query,
   activePinMode,
-  isLoading,
   onPointAChange,
   onPointBChange,
-  onQueryChange,
   onTogglePinMode,
   onSwapPoints,
+  persons,
+  onAddPerson,
+  onRemovePerson,
+  onRenamePerson,
+  onUpdatePersonLocation,
+  activePinPersonId,
+  onTogglePinPersonId,
+  query,
+  isLoading,
+  onQueryChange,
   onSubmit,
 }: SearchFormProps) {
+  const isSubmitDisabled =
+    isLoading ||
+    !query.trim() ||
+    (persons
+      ? persons.length < 2 || persons.some((p) => !p.address || !p.address.trim())
+      : !pointA || !pointB);
+
   return (
     <div className="p-5 space-y-4 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-      <div className="space-y-3 relative">
-        <LocationInput
-          label="Person A's Location"
-          badgeLabel="A"
-          point={pointA}
-          onChange={onPointAChange}
-          colorClass="bg-emerald-500"
-          isActivePinMode={activePinMode === "A"}
-          onTogglePinMode={() => onTogglePinMode("A")}
-        />
+      {persons ? (
+        <div className="space-y-3">
+          {persons.map((person, index) => (
+            <LocationInput
+              key={person.id}
+              person={person}
+              label={person.name}
+              badgeLabel={String(index + 1)}
+              point={person.address ? { address: person.address, lat: person.lat, lng: person.lng } : null}
+              isActivePinMode={activePinPersonId === person.id}
+              onTogglePinMode={() => onTogglePinPersonId?.(person.id)}
+              onChange={(pt) =>
+                onUpdatePersonLocation?.(
+                  person.id,
+                  pt ? { address: pt.address, lat: pt.lat, lng: pt.lng } : { address: "", lat: 0, lng: 0 }
+                )
+              }
+              onRename={(newName) => onRenamePerson?.(person.id, newName)}
+              onDelete={persons.length > 2 ? () => onRemovePerson?.(person.id) : undefined}
+            />
+          ))}
 
-        <div className="flex justify-center -my-1 relative z-10">
-          <button
-            type="button"
-            onClick={onSwapPoints}
-            title="Swap Point A and Point B"
-            className="p-1.5 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm text-zinc-400 hover:text-indigo-600 hover:rotate-180 transition-all duration-300 cursor-pointer"
-          >
-            <ArrowUpDown className="w-3.5 h-3.5" />
-          </button>
+          {persons.length < 8 && onAddPerson && (
+            <button
+              type="button"
+              onClick={onAddPerson}
+              className="w-full py-2.5 px-3 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-400 text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              + Add Person ({persons.length}/8)
+            </button>
+          )}
         </div>
+      ) : (
+        <div className="space-y-3 relative">
+          <LocationInput
+            label="Person A's Location"
+            badgeLabel="A"
+            point={pointA || null}
+            onChange={onPointAChange || (() => {})}
+            colorClass="bg-emerald-500"
+            isActivePinMode={activePinMode === "A"}
+            onTogglePinMode={() => onTogglePinMode?.("A")}
+          />
 
-        <LocationInput
-          label="Person B's Location"
-          badgeLabel="B"
-          point={pointB}
-          onChange={onPointBChange}
-          colorClass="bg-violet-500"
-          isActivePinMode={activePinMode === "B"}
-          onTogglePinMode={() => onTogglePinMode("B")}
-        />
-      </div>
+          <div className="flex justify-center -my-1 relative z-10">
+            <button
+              type="button"
+              onClick={onSwapPoints}
+              title="Swap Point A and Point B"
+              className="p-1.5 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm text-zinc-400 hover:text-indigo-600 hover:rotate-180 transition-all duration-300 cursor-pointer"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <LocationInput
+            label="Person B's Location"
+            badgeLabel="B"
+            point={pointB || null}
+            onChange={onPointBChange || (() => {})}
+            colorClass="bg-violet-500"
+            isActivePinMode={activePinMode === "B"}
+            onTogglePinMode={() => onTogglePinMode?.("B")}
+          />
+        </div>
+      )}
 
       <div>
         <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 mb-1.5">
@@ -117,7 +178,7 @@ export function SearchForm({
       <button
         type="button"
         onClick={onSubmit}
-        disabled={isLoading || !pointA || !pointB || !query.trim()}
+        disabled={isSubmitDisabled}
         className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-semibold shadow-md shadow-indigo-500/25 flex items-center justify-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
       >
         {isLoading ? (
@@ -128,7 +189,7 @@ export function SearchForm({
         ) : (
           <>
             <Search className="w-4 h-4" />
-            Find Halfway Branches
+            {persons ? "Find Midpoint Branches" : "Find Halfway Branches"}
           </>
         )}
       </button>
