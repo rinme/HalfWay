@@ -30,7 +30,7 @@ export function Header({ settings, onOpenSettings }: HeaderProps) {
         </div>
         <div>
           <h1 className="text-base font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-none">
-            Halfway Finder
+            HalfWay
           </h1>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
             Fair venue midpoint matching

@@ -390,7 +390,7 @@ describe("Task 7: Split Layout & UI Components", () => {
       });
 
       const text = collectTextContent(container);
-      expect(text).toContain("Halfway Finder");
+      expect(text).toContain("HalfWay");
       expect(text).toContain("Fair venue midpoint matching");
       expect(text).toContain("OpenStreetMap");
 

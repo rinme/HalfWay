@@ -579,7 +579,7 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
 
     // 2. Check Header branding
     const allText = collectTextContent(container);
-    expect(allText).toContain("Halfway Finder");
+    expect(allText).toContain("HalfWay");
     expect(allText).toContain("Fair venue midpoint matching");
     expect(allText).toContain("OpenStreetMap");
 
