@@ -1327,6 +1327,25 @@ describe("Multi-Person State Management (Task 4)", () => {
 
     await unmount();
   });
+
+  it("hydrates 3+ participants from URL p parameter", async () => {
+    const customPersons = [
+      { id: "1", name: "Alice", address: "Siam", lat: 13.75, lng: 100.5, color: "#10b981" },
+      { id: "2", name: "Bob", address: "Silom", lat: 13.72, lng: 100.52, color: "#8b5cf6" },
+      { id: "3", name: "Charlie", address: "Asok", lat: 13.73, lng: 100.56, color: "#f59e0b" },
+    ];
+    window.location.search = `?p=${encodeURIComponent(JSON.stringify(customPersons))}&q=Matcha`;
+
+    const { result, unmount } = await renderHook(() => useSearchState());
+
+    expect(result.current.state.persons.length).toBe(3);
+    expect(result.current.state.persons[0].name).toBe("Alice");
+    expect(result.current.state.persons[2].name).toBe("Charlie");
+    expect(result.current.state.query).toBe("Matcha");
+
+    window.location.search = "";
+    await unmount();
+  });
 });
 
 describe("Task 4: ShareModal Component", () => {

@@ -322,15 +322,27 @@ export function useSearchState() {
       // Update URL query params
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
-        if (state.persons[0] && (state.persons[0].lat !== 0 || state.persons[0].lng !== 0)) {
-          params.set("a_lat", state.persons[0].lat.toString());
-          params.set("a_lng", state.persons[0].lng.toString());
-          params.set("a_name", state.persons[0].address);
-        }
-        if (state.persons[1] && (state.persons[1].lat !== 0 || state.persons[1].lng !== 0)) {
-          params.set("b_lat", state.persons[1].lat.toString());
-          params.set("b_lng", state.persons[1].lng.toString());
-          params.set("b_name", state.persons[1].address);
+        if (state.persons.length === 2) {
+          params.delete("p");
+          if (state.persons[0] && (state.persons[0].lat !== 0 || state.persons[0].lng !== 0)) {
+            params.set("a_lat", state.persons[0].lat.toString());
+            params.set("a_lng", state.persons[0].lng.toString());
+            params.set("a_name", state.persons[0].address);
+          }
+          if (state.persons[1] && (state.persons[1].lat !== 0 || state.persons[1].lng !== 0)) {
+            params.set("b_lat", state.persons[1].lat.toString());
+            params.set("b_lng", state.persons[1].lng.toString());
+            params.set("b_name", state.persons[1].address);
+          }
+        } else {
+          // Multi-person (N > 2): store serialized participants so copying URL directly preserves all participants
+          params.delete("a_lat");
+          params.delete("a_lng");
+          params.delete("a_name");
+          params.delete("b_lat");
+          params.delete("b_lng");
+          params.delete("b_name");
+          params.set("p", encodeURIComponent(JSON.stringify(state.persons)));
         }
         params.set("q", state.query.trim());
         window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
@@ -396,6 +408,26 @@ export function useSearchState() {
         )
         .catch(() => {});
       return;
+    }
+
+    const pParam = params.get("p");
+    if (pParam) {
+      try {
+        const decoded = decodeURIComponent(pParam);
+        const parsed = JSON.parse(decoded);
+        if (Array.isArray(parsed) && parsed.length >= 2) {
+          const p0 = parsed[0];
+          const p1 = parsed[1];
+          setState((prev) => ({
+            ...prev,
+            persons: parsed,
+            pointA: p0 && p0.address ? { address: p0.address, lat: p0.lat, lng: p0.lng } : null,
+            pointB: p1 && p1.address ? { address: p1.address, lat: p1.lat, lng: p1.lng } : null,
+            query: params.get("q") || prev.query,
+          }));
+          return;
+        }
+      } catch {}
     }
 
     const aLat = params.get("a_lat");

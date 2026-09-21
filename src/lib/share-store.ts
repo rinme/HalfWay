@@ -23,11 +23,16 @@ const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
  * Generates a random alphanumeric short code.
  */
 export function generateShortCode(length: number = 6): string {
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
   let code = "";
-  for (let i = 0; i < length; i++) {
-    code += CHARSET[bytes[i] % CHARSET.length];
+  // 62 * 4 = 248; bytes >= 248 are rejected to avoid modulo bias
+  while (code.length < length) {
+    const bytes = new Uint8Array(length * 2);
+    crypto.getRandomValues(bytes);
+    for (let i = 0; i < bytes.length && code.length < length; i++) {
+      if (bytes[i] < 248) {
+        code += CHARSET[bytes[i] % 62];
+      }
+    }
   }
   return code;
 }

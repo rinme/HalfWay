@@ -117,9 +117,7 @@ export function scoreAndRankBranchesMulti(
     const distMid = haversineDistance(centroid, branchCoord);
     const tier: "primary" | "extended" = distMid <= primaryRadiusKm ? "primary" : "extended";
 
-    const originLat = persons.length > 0 ? persons[0].lat : centroid.lat;
-    const originLng = persons.length > 0 ? persons[0].lng : centroid.lng;
-    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${branch.lat},${branch.lng}`;
+    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${branch.lat},${branch.lng}`;
 
     return {
       ...branch,

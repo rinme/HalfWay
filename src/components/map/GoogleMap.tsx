@@ -33,6 +33,16 @@ const DEFAULT_COLORS = [
   "#f97316", // Orange
 ];
 
+function escapeHtml(str: string | number | null | undefined): string {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function getPersonLabel(person: Person, idx: number): string {
   if (!person.name || !person.name.trim()) {
     return String(idx + 1);
@@ -240,7 +250,7 @@ export function GoogleMap({
         overlaysRef.current.push(marker);
 
         const info = new google.maps.InfoWindow({
-          content: `<strong>${person.name || `Person ${idx + 1}`}</strong><br/>${person.address}`,
+          content: `<strong>${escapeHtml(person.name || `Person ${idx + 1}`)}</strong><br/>${escapeHtml(person.address)}`,
         });
         marker.addListener("click", () => openInfoWindow(info, marker));
 
@@ -289,7 +299,7 @@ export function GoogleMap({
         overlaysRef.current.push(markerA);
 
         const infoA = new google.maps.InfoWindow({
-          content: `<strong>Point A</strong><br/>${pointA.address}`,
+          content: `<strong>Point A</strong><br/>${escapeHtml(pointA.address)}`,
         });
         markerA.addListener("click", () => openInfoWindow(infoA, markerA));
 
@@ -319,7 +329,7 @@ export function GoogleMap({
         overlaysRef.current.push(markerB);
 
         const infoB = new google.maps.InfoWindow({
-          content: `<strong>Point B</strong><br/>${pointB.address}`,
+          content: `<strong>Point B</strong><br/>${escapeHtml(pointB.address)}`,
         });
         markerB.addListener("click", () => openInfoWindow(infoB, markerB));
 
@@ -416,15 +426,15 @@ export function GoogleMap({
 
       const distanceBreakdown =
         b.distances && b.distances.length > 0
-          ? b.distances.map((d) => `${d.name}: ${d.distance} km`).join(" | ")
+          ? b.distances.map((d) => `${escapeHtml(d.name)}: ${d.distance} km`).join(" | ")
           : `To A: ${b.distA ?? 0} km | To B: ${b.distB ?? 0} km`;
 
       const infoWindow = new google.maps.InfoWindow({
         content:
-          `<strong>#${idx + 1} ${b.name}</strong><br/>${b.address}<br/><br/>` +
+          `<strong>#${idx + 1} ${escapeHtml(b.name)}</strong><br/>${escapeHtml(b.address)}<br/><br/>` +
           `${distanceBreakdown}<br/>` +
           `Fairness: <strong>${b.fairnessScore} km</strong><br/><br/>` +
-          `<a href="${b.googleMapsUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline;">Open Directions</a>`,
+          `<a href="${encodeURI(b.googleMapsUrl)}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline;">Open Directions</a>`,
       });
 
       marker.addListener("click", () => openInfoWindow(infoWindow, marker));
