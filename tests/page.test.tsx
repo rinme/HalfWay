@@ -1101,6 +1101,15 @@ describe("Task 9: Main Page Assembly & Verification (HalfwayFinderPage)", () => 
     const text = collectTextContent(container);
     expect(text).toContain("Failed to connect to Overpass API");
 
+    // Search form is not collapsed, submitBtn is still in the document
+    const updatedButtons = findAllElements(container, (n) => n.tagName === "BUTTON");
+    const remainingSubmitBtn = updatedButtons.find(
+      (b) =>
+        collectTextContent(b).includes("Find Midpoint Branches") ||
+        collectTextContent(b).includes("Find Halfway Branches")
+    );
+    expect(remainingSubmitBtn).toBeDefined();
+
     await act(async () => {
       root.unmount();
     });

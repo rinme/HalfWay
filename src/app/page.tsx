@@ -50,9 +50,11 @@ export default function HalfwayFinderPage() {
 
   // When search completes with branches, switch to map and collapse search
   const handleSearchSubmit = async () => {
-    await executeSearch();
-    setIsSearchCollapsed(true);
-    setMobileView("map");
+    const hasBranches = await executeSearch();
+    if (hasBranches) {
+      setIsSearchCollapsed(true);
+      setMobileView("map");
+    }
   };
 
   const handleMapClick = async (coord: LatLng) => {

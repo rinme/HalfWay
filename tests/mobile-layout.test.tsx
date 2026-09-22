@@ -183,4 +183,72 @@ describe("Mobile Layout Integration", () => {
     // After closing, only the 1 element in ResultsList remains
     expect(screen.getAllByText("Roast Coffee CentralWorld").length).toBe(1);
   });
+
+  it("does not collapse search form or switch away from list view if search API returns an error", async () => {
+    window.location.search =
+      "?a_lat=13.746&a_lng=100.534&a_name=Siam+Paragon&b_lat=13.744&b_lng=100.539&b_name=CentralWorld&q=Starbucks";
+
+    globalThis.fetch = mock(async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("/api/search-midpoint")) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: "Overpass query timed out. Please try again.",
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as any;
+
+    render(<Home />);
+    const searchBtn = screen.getByRole("button", { name: /find (fair )?midpoint/i });
+    fireEvent.click(searchBtn);
+
+    // Wait for search error to display
+    await waitFor(() => {
+      expect(screen.getByText(/Overpass query timed out/i)).toBeDefined();
+    });
+
+    // Form should still be expanded (search button still present, not replaced by summary)
+    expect(screen.getByRole("button", { name: /find (fair )?midpoint/i })).toBeDefined();
+    // Toggle button should still say "View Map" (still on list view)
+    expect(screen.getByRole("button", { name: /view map/i })).toBeDefined();
+  });
+
+  it("does not collapse search form or switch to map view if search returns no branches or fails", async () => {
+    window.location.search =
+      "?a_lat=13.746&a_lng=100.534&a_name=Siam+Paragon&b_lat=13.744&b_lng=100.539&b_name=CentralWorld&q=NonExistentStore";
+
+    globalThis.fetch = mock(async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("/api/search-midpoint")) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            branches: [],
+            midpoint: { lat: 13.745, lng: 100.535 },
+            totalDistanceAB: 2.2,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as any;
+
+    render(<Home />);
+    const searchBtn = screen.getByRole("button", { name: /find (fair )?midpoint/i });
+    fireEvent.click(searchBtn);
+
+    await waitFor(() => {
+      // Results list shows empty/no branches
+      expect(screen.getByText(/No branches displayed yet/i)).toBeDefined();
+    });
+
+    // Form should not have collapsed
+    expect(screen.getByRole("button", { name: /find (fair )?midpoint/i })).toBeDefined();
+    // View should remain list view (button says "View Map")
+    expect(screen.getByRole("button", { name: /view map/i })).toBeDefined();
+  });
 });

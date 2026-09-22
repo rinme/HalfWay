@@ -250,7 +250,7 @@ export function useSearchState() {
     });
   }, []);
 
-  const executeSearch = useCallback(async () => {
+  const executeSearch = useCallback(async (): Promise<boolean> => {
     const allPersonsValid =
       state.persons.length >= 2 &&
       state.persons.every((p) => p.address && p.address.trim() && (p.lat !== 0 || p.lng !== 0));
@@ -263,7 +263,7 @@ export function useSearchState() {
             ? "Please provide a location for all participants and a target venue/brand name."
             : "Please provide Point A, Point B, and a target venue/brand name.",
       }));
-      return;
+      return false;
     }
 
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
@@ -309,10 +309,12 @@ export function useSearchState() {
         throw new Error(data.error || "Failed to search for midpoint branches");
       }
 
+      const branches = data.branches || [];
+
       setState((prev) => ({
         ...prev,
         isLoading: false,
-        branches: data.branches || [],
+        branches,
         midpoint: data.midpoint || null,
         totalDistanceAB: data.totalDistanceAB ?? null,
         activePinMode: null,
@@ -347,6 +349,8 @@ export function useSearchState() {
         params.set("q", state.query.trim());
         window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
       }
+
+      return branches.length > 0;
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error ? err.message : "An error occurred while finding branches.";
@@ -355,6 +359,7 @@ export function useSearchState() {
         isLoading: false,
         error: errorMessage,
       }));
+      return false;
     }
   }, [state.pointA, state.pointB, state.persons, state.query, settings]);
 
